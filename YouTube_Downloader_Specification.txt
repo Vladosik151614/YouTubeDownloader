@@ -1,0 +1,31 @@
+Technical Specification: Standalone YouTube Downloader
+
+Goal: Create a standalone Windows application (.exe) that does NOT
+depend on Stacher. Use yt-dlp and FFmpeg bundled with the application.
+
+Main requirements: 1. Single input field accepting either: - YouTube
+video URL - YouTube playlist URL 2. Automatically detect whether the URL
+is a video or playlist. 3. Default output folder: C:. Allow changing the
+output folder with a folder picker. 5. Save the last selected folder. 6.
+Download the highest available quality. 7. Preferred output: - MP4 -
+H.264 (AVC) - 1080p - 60 FPS when available. 8. If the downloaded file
+is not H.264: - Detect codec using ffprobe. - Prompt: “The following
+video(s) are not H.264. Convert now?” 9. If a playlist contains mixed
+codecs: - Show only the videos requiring conversion. 10. If all playlist
+videos require conversion: - Offer to convert the entire playlist. 11.
+Conversion: - FFmpeg. - libx264 or NVIDIA h264_nvenc if available. - AAC
+audio. - MP4 output. 12. Allow keeping or deleting original files after
+conversion. 13. Support: - cookies.txt - –cookies-from-browser 14.
+Include Settings page: - Download folder - Default codec - Prefer GPU
+encoding - Keep originals - Auto-update yt-dlp 15. Include download
+queue. 16. Show: - Progress - Speed - ETA 17. Log all errors to logs
+folder. 18. Handle: - Network failures - Existing files - Interrupted
+downloads 19. Bundle: - yt-dlp - ffmpeg - ffprobe 20. Build as a
+standalone Windows .exe without requiring Stacher.
+
+Suggested stack: - Python 3.12 - PySide6 - yt-dlp - FFmpeg - ffprobe -
+PyInstaller (one-file build)
+
+Acceptance criteria: - Works with single videos and playlists. - No
+dependency on Stacher. - Simple GUI. - Reliable downloads. - Automatic
+codec detection. - Optional H.264 conversion.

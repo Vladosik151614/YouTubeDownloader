@@ -1,0 +1,29 @@
+name: Download error
+description: Report a failed download
+title: "[Download Error]: "
+labels: ["bug", "download"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please do not include cookies, passwords, tokens, private links, or personal local paths.
+  - type: textarea
+    id: report
+    attributes:
+      label: App support report
+      description: Paste the sanitized report copied from the app.
+      placeholder: Paste report here
+    validations:
+      required: true
+  - type: dropdown
+    id: service
+    attributes:
+      label: Service
+      options:
+        - YouTube
+        - SoundCloud
+        - Twitch
+        - TikTok
+        - Other
+    validations:
+      required: true
