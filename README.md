@@ -56,6 +56,8 @@ Version target: `0.1.0`
 
 ## Install From Command Line
 
+The installer places the app in `C:\Program Files\YouTube Downloader` by default.
+
 Normal install command:
 
 ```powershell

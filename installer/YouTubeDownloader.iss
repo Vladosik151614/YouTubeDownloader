@@ -11,7 +11,7 @@ AppId={{7F781982-81D9-42D4-8B41-YTDL00000100}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
-DefaultDirName={localappdata}\Programs\YouTube Downloader
+DefaultDirName={autopf}\YouTube Downloader
 DefaultGroupName=YouTube Downloader
 AllowNoIcons=yes
 LicenseFile=..\USER_AGREEMENT.md
@@ -22,7 +22,7 @@ SetupIconFile=..\youtube.ico
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
-PrivilegesRequired=lowest
+PrivilegesRequired=admin
 UninstallDisplayIcon={app}\{#MyAppExeName}
 
 [Languages]

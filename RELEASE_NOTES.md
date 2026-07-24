@@ -14,3 +14,4 @@ Planned release contents:
 - H.264 conversion support.
 - Local privacy checks before publishing.
 - Installer package with privacy/user agreement.
+- Default installation path: `C:\Program Files\YouTube Downloader`.
