@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Latest release
+    url: https://github.com/Vladosik151614/YouTubeDownloader/releases/latest
+    about: Download the latest stable installer.
+  - name: User guide
+    url: https://github.com/Vladosik151614/YouTubeDownloader#basic-usage
+    about: Read the basic usage instructions before opening a question.

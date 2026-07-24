@@ -1,0 +1,21 @@
+name: Question
+description: Ask for help or clarification
+title: "[Question]: "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please do not include cookies, passwords, tokens, private links, or personal local paths.
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: What do you need help with?
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Add app version, Windows version, service name, or screenshots if useful.
