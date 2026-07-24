@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Safety and quality checks
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Privacy check
+        run: python tools\privacy_check.py
+
+      - name: Quality check
+        run: python tools\quality_check.py
+
+      - name: Build portable executable
+        run: python -m PyInstaller YouTubeDownloader.spec
+
+      - name: Upload portable executable artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: YouTubeDownloader-portable
+          path: dist/YouTubeDownloader.exe
+          if-no-files-found: error
