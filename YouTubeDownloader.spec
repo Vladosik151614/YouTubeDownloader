@@ -1,7 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_all
 
-datas = [('youtube.ico', '.')]
+datas = [('youtube.ico', '.'), ('app/assets/service_icons', 'app/assets/service_icons')]
 binaries = []
 hiddenimports = ['yt_dlp', 'yt_dlp.extractor', 'yt_dlp.extractor.lazy_extractors', 'PySide6.QtCore', 'PySide6.QtWidgets', 'PySide6.QtGui']
 tmp_ret = collect_all('yt_dlp')

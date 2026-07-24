@@ -50,13 +50,13 @@ Version target: `0.1.0`
 
 ## Install From Command Line
 
-Local installer:
+Normal install command:
 
 ```powershell
-.\YouTubeDownloaderSetup-0.1.0.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+irm "https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.0.exe" -OutFile "$env:TEMP\YouTubeDownloaderSetup.exe"; Start-Process "$env:TEMP\YouTubeDownloaderSetup.exe" -Wait
 ```
 
-GitHub release installer:
+Silent install command:
 
 ```powershell
 $url = "https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.0.exe"

@@ -113,11 +113,45 @@ def run():
         ],
     )
 
+    window.settings_page.tabs.setCurrentIndex(2)
+    app.processEvents()
+    capture(
+        "05-playlists-annotated.png",
+        [
+            (_rect_for(window, window.settings_page.playlist_subfolders_sw), "Subfolders"),
+            (_rect_for(window, window.settings_page.playlist_numbering_sw), "Numbering"),
+            (_rect_for(window, window.settings_page.skip_duplicates_sw), "Duplicate archive"),
+            (_rect_for(window, window.settings_page.embed_subtitles_sw), "Subtitles"),
+        ],
+    )
+
+    window.settings_page.tabs.setCurrentIndex(4)
+    app.processEvents()
+    capture(
+        "06-notifications-annotated.png",
+        [
+            (_rect_for(window, window.settings_page.notify_download_sw), "Download alerts"),
+            (_rect_for(window, window.settings_page.confirm_exit_sw), "Exit confirmation"),
+            (_rect_for(window, window.settings_page.play_sound_sw), "Sound"),
+        ],
+    )
+
+    window.settings_page.tabs.setCurrentIndex(5)
+    app.processEvents()
+    capture(
+        "07-access-settings-annotated.png",
+        [
+            (_rect_for(window, window.settings_page.auto_export_cookies_sw), "Automatic access"),
+            (_rect_for(window, window.settings_page.browser_combo), "Manual browser"),
+            (_rect_for(window, window.settings_page.cookies_file_edit), "Manual file"),
+        ],
+    )
+
     window._switch_page(3)
     app.processEvents()
     cards = window.accounts_page.findChildren(QLabel)
     capture(
-        "05-accounts-annotated.png",
+        "08-accounts-annotated.png",
         [
             (_rect_for(window, window.accounts_page), "Optional sign-in"),
             (_rect_for(window, cards[3] if len(cards) > 3 else window.accounts_page), "Service access"),
@@ -127,23 +161,11 @@ def run():
     window._switch_page(2)
     app.processEvents()
     capture(
-        "06-history-annotated.png",
+        "09-history-annotated.png",
         [
             (_rect_for(window, window.history_page.table), "Download history"),
         ],
     )
-
-    if getattr(window, "_owner_tools_enabled", False):
-        window._switch_page(4)
-        app.processEvents()
-        capture(
-            "07-owner-tools-annotated.png",
-            [
-                (_rect_for(window, window.owner_tools_page.check_btn), "Safety check"),
-                (_rect_for(window, window.owner_tools_page.push_btn), "Push"),
-                (_rect_for(window, window.owner_tools_page.log_box), "Log"),
-            ],
-        )
 
     window.close()
     app.quit()
@@ -151,6 +173,7 @@ def run():
 
 if __name__ == "__main__":
     os.environ.setdefault("PYTHONDONTWRITEBYTECODE", "1")
+    os.environ["YTD_PUBLIC_DOCS_MODE"] = "1"
     from app.main_window import MainWindow
 
     app = QApplication(sys.argv)

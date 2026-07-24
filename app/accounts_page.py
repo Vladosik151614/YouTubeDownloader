@@ -4,7 +4,7 @@ accounts_page.py - account access controls for supported services.
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QPixmap
 from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
@@ -23,6 +23,7 @@ from app.auth_manager import (
     export_service_cookies,
     open_login_browser,
 )
+from app.binary_manager import get_resource_path
 
 
 SERVICE_LABELS = {
@@ -32,11 +33,11 @@ SERVICE_LABELS = {
     "soundcloud": "SoundCloud",
 }
 
-SERVICE_BADGES = {
-    "youtube": ("▶", "#ff3b3b"),
-    "tiktok": ("♪", "#22d3ee"),
-    "twitch": ("T", "#9146ff"),
-    "soundcloud": ("S", "#ff7a1a"),
+SERVICE_ICONS = {
+    "youtube": "app/assets/service_icons/youtube.png",
+    "tiktok": "app/assets/service_icons/tiktok.png",
+    "twitch": "app/assets/service_icons/twitch.png",
+    "soundcloud": "app/assets/service_icons/soundcloud.png",
 }
 
 
@@ -76,13 +77,15 @@ class AccountsPage(QWidget):
         grid.setHorizontalSpacing(10)
         grid.setVerticalSpacing(8)
 
-        badge_text, badge_color = SERVICE_BADGES[service]
-        badge = QLabel(badge_text)
-        badge.setFixedSize(34, 34)
+        badge = QLabel()
+        badge.setFixedSize(40, 40)
         badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        badge.setStyleSheet(
-            f"background: {badge_color}; color: white; border-radius: 17px; font-weight: 800; font-size: 16px;"
-        )
+        pixmap = QPixmap(get_resource_path(SERVICE_ICONS[service]))
+        if not pixmap.isNull():
+            badge.setPixmap(pixmap.scaled(34, 34, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+        else:
+            badge.setText(SERVICE_LABELS[service][0])
+            badge.setStyleSheet("background: #333; color: white; border-radius: 17px; font-weight: 800;")
         grid.addWidget(badge, 0, 0, 2, 1)
 
         name = QLabel(SERVICE_LABELS[service])

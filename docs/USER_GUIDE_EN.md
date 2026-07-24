@@ -32,21 +32,27 @@ The installer uses a per-user Windows folder and does not require administrator 
 
 You can also run `YouTubeDownloader.exe` directly. This is useful for quick checks and development.
 
-### Command-Line Install
+### PowerShell Install Command
 
-Local installer:
+This command downloads the latest installer from GitHub Releases to the Windows temp folder and starts the normal installer wizard:
 
 ```powershell
-.\YouTubeDownloaderSetup-0.1.0.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+irm "https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.0.exe" -OutFile "$env:TEMP\YouTubeDownloaderSetup.exe"; Start-Process "$env:TEMP\YouTubeDownloaderSetup.exe" -Wait
 ```
 
-After the GitHub release exists, the app can be installed with a direct PowerShell command:
+Silent install without windows:
 
 ```powershell
 $url = "https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.0.exe"
 $installer = "$env:TEMP\YouTubeDownloaderSetup.exe"
 Invoke-WebRequest $url -OutFile $installer
 Start-Process $installer -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" -Wait
+```
+
+Local installer when the setup file is already downloaded next to PowerShell:
+
+```powershell
+.\YouTubeDownloaderSetup-0.1.0.exe
 ```
 
 Later, a `winget` manifest can make the install command shorter:
@@ -128,9 +134,40 @@ Audio-only downloads do not use video conversion. The app does not ask for H.264
 
 Proxy is optional. Use it only when a service blocks the current network or when your environment requires it.
 
+## Playlists And Channels
+
+![Playlists](assets/screenshots/05-playlists-annotated.png)
+
+1. Subfolders create separate folders for playlists, channels and search results.
+2. Numbering keeps items in source order.
+3. Duplicate skipping avoids downloading files that are already present in the archive.
+4. Subtitles are saved or embedded when the service and selected format support it.
+
+These settings matter most for large playlists and channels because they keep files organized and reduce repeat downloads.
+
+## Notifications
+
+![Notifications](assets/screenshots/06-notifications-annotated.png)
+
+1. Download and processing notifications report completion without opening the window.
+2. Exit confirmation helps avoid accidentally closing the app while downloads are active.
+3. Alert sounds can be enabled separately.
+
+When background mode is enabled, the app can stay in the tray and report completion through Windows notifications.
+
+## Access Settings
+
+![Access settings](assets/screenshots/07-access-settings-annotated.png)
+
+1. Automatic access refresh is used when a service requires sign-in.
+2. Manual browser selection is for diagnostics.
+3. Manual access files are only needed when automatic mode is not suitable.
+
+Normal users usually do not need to change this section. Public links should download without sign-in.
+
 ## Accounts And Access
 
-![Accounts](assets/screenshots/05-accounts-annotated.png)
+![Accounts](assets/screenshots/08-accounts-annotated.png)
 
 1. Sign-in is optional for public content.
 2. Each service can open its own isolated sign-in window.
@@ -146,7 +183,7 @@ If a public download works without sign-in, do not sign in.
 
 ## History
 
-![History](assets/screenshots/06-history-annotated.png)
+![History](assets/screenshots/09-history-annotated.png)
 
 1. History lists completed and failed downloads.
 
@@ -157,18 +194,6 @@ From history, users can open the result folder or inspect error details.
 Normal users see action-oriented errors: retry, check network, sign in or change folder. Technical details are only shown in Developer Mode.
 
 `Copy Report` creates a safe report without private access data. `Open GitHub` opens a GitHub issue form when the user wants to send the error to the developer.
-
-## GitHub Owner Menu
-
-![Owner tools](assets/screenshots/07-owner-tools-annotated.png)
-
-This section is hidden for normal users. It appears only on the project owner machine when the local owner flag is enabled and GitHub CLI is authenticated as the project owner.
-
-1. `Safety Check` runs privacy and quality checks without publishing.
-2. `Push to GitHub` runs the checks, creates a commit when files changed and pushes the `main` branch.
-3. The log explains which step completed or where the workflow stopped.
-
-Before pushing, the app blocks publication if it finds generated build folders, local settings, logs, access files, tokens or absolute user paths.
 
 ## Browser Interface For Checks
 

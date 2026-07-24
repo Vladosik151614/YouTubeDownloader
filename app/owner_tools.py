@@ -52,6 +52,8 @@ def _gh_login() -> str:
 
 
 def owner_tools_available() -> bool:
+    if os.environ.get("YTD_PUBLIC_DOCS_MODE") == "1":
+        return False
     return LOCAL_OWNER_FLAG.exists() and _gh_login().lower() == OWNER_LOGIN.lower()
 
 
