@@ -1,0 +1,81 @@
+name: Release Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag, for example v0.1.1"
+        required: true
+        type: string
+      version:
+        description: "App version, for example 0.1.1"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    name: Build installer and release assets
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Privacy check
+        run: python tools\privacy_check.py
+
+      - name: Quality check
+        run: python tools\quality_check.py
+
+      - name: Build portable executable
+        run: python -m PyInstaller YouTubeDownloader.spec
+
+      - name: Install Inno Setup
+        run: choco install innosetup --yes --no-progress
+
+      - name: Set installer version
+        shell: pwsh
+        run: |
+          $version = "${{ inputs.version }}"
+          $script = Get-Content "installer\YouTubeDownloader.iss" -Raw
+          $script = $script -replace '#define MyAppVersion ".+?"', "#define MyAppVersion `"$version`""
+          $script = $script -replace 'OutputBaseFilename=YouTubeDownloaderSetup-.+', "OutputBaseFilename=YouTubeDownloaderSetup-$version"
+          Set-Content "installer\YouTubeDownloader.iss" $script -Encoding utf8
+
+      - name: Build installer
+        run: iscc installer\YouTubeDownloader.iss
+
+      - name: Prepare release assets
+        shell: pwsh
+        run: |
+          $version = "${{ inputs.version }}"
+          New-Item -ItemType Directory -Force -Path release-assets | Out-Null
+          Copy-Item "dist\YouTubeDownloader.exe" "release-assets\YouTubeDownloader-$version-portable.exe"
+          Copy-Item "release\YouTubeDownloaderSetup-$version.exe" "release-assets\YouTubeDownloaderSetup-$version.exe"
+          Get-FileHash -Algorithm SHA256 "release-assets\YouTubeDownloader-$version-portable.exe" |
+            ForEach-Object { "$($_.Hash.ToLowerInvariant())  YouTubeDownloader-$version-portable.exe" } |
+            Set-Content "release-assets\YouTubeDownloader-$version-portable.exe.sha256" -Encoding ascii
+          Get-FileHash -Algorithm SHA256 "release-assets\YouTubeDownloaderSetup-$version.exe" |
+            ForEach-Object { "$($_.Hash.ToLowerInvariant())  YouTubeDownloaderSetup-$version.exe" } |
+            Set-Content "release-assets\YouTubeDownloaderSetup-$version.exe.sha256" -Encoding ascii
+
+      - name: Upload assets to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "${{ inputs.tag }}" --repo "${{ github.repository }}" || gh release create "${{ inputs.tag }}" --repo "${{ github.repository }}" --title "YouTube Downloader ${{ inputs.version }}" --notes-file RELEASE_NOTES.md
+          gh release upload "${{ inputs.tag }}" --repo "${{ github.repository }}" release-assets\* --clobber
