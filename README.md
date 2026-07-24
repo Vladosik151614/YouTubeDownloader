@@ -1,5 +1,10 @@
 # YouTube Downloader
 
+[![CI](https://github.com/Vladosik151614/YouTubeDownloader/actions/workflows/ci.yml/badge.svg)](https://github.com/Vladosik151614/YouTubeDownloader/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Vladosik151614/YouTubeDownloader?label=release)](https://github.com/Vladosik151614/YouTubeDownloader/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/Vladosik151614/YouTubeDownloader/total?label=downloads)](https://github.com/Vladosik151614/YouTubeDownloader/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
 A Windows desktop downloader for video, music, playlists, channels and clips from supported public services.
 
 Version target: `0.1.0`
@@ -27,6 +32,7 @@ Version target: `0.1.0`
 - [Руководство RU](docs/USER_GUIDE_RU.md)
 - [Privacy Policy](PRIVACY.md)
 - [User Agreement](USER_AGREEMENT.md)
+- [Changelog](CHANGELOG.md)
 - [Engineering Standards](docs/ENGINEERING_STANDARDS.md)
 
 ## Default Download Profile
