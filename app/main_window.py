@@ -34,6 +34,7 @@ from app.support_dialog import SupportErrorDialog
 from app.tray_controller import TrayController
 from app.localization import apply_translations
 from app.owner_tools import OwnerToolsPage, owner_tools_available
+from app.process_utils import hidden_subprocess_kwargs
 
 from app.theme import app_qss
 
@@ -370,7 +371,7 @@ class MainWindow(QMainWindow):
         if reply != QMessageBox.StandardButton.Yes:
             return
         try:
-            subprocess.Popen([path, "/SILENT", "/NORESTART"])
+            subprocess.Popen([path, "/SILENT", "/NORESTART"], **hidden_subprocess_kwargs())
             if self._tray:
                 self._tray.allow_close = True
             QApplication.quit()

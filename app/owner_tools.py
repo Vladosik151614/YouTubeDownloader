@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.settings_manager import APP_DATA_DIR
+from app.process_utils import hidden_subprocess_kwargs
 
 
 OWNER_LOGIN = "Vladosik151614"
@@ -39,6 +40,7 @@ def _run(command: list[str], *, timeout: int = 120) -> tuple[int, str]:
             timeout=timeout,
             encoding="utf-8",
             errors="replace",
+            **hidden_subprocess_kwargs(),
         )
         output = "\n".join(part for part in (result.stdout.strip(), result.stderr.strip()) if part)
         return result.returncode, output

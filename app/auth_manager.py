@@ -12,6 +12,7 @@ from urllib.parse import urlparse
 from yt_dlp.cookies import extract_cookies_from_browser
 
 from app.logger import logger
+from app.process_utils import hidden_subprocess_kwargs
 from app.settings_manager import APP_DATA_DIR
 
 
@@ -127,7 +128,7 @@ def open_login_browser(service: str) -> str:
         "--no-default-browser-check",
         LOGIN_URLS[service],
     ]
-    subprocess.Popen(args)
+    subprocess.Popen(args, **hidden_subprocess_kwargs())
     logger.info(f"Opened isolated login browser for {service}")
     return profile_dir(service)
 

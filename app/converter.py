@@ -7,6 +7,7 @@ import subprocess
 from PySide6.QtCore import QThread, Signal
 from app.logger import logger
 from app.binary_manager import get_binary_path
+from app.process_utils import hidden_subprocess_kwargs
 
 
 def probe_codec(filepath: str) -> str:
@@ -17,7 +18,7 @@ def probe_codec(filepath: str) -> str:
         "-show_streams", "-select_streams", "v:0", filepath
     ]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30, **hidden_subprocess_kwargs())
         data = json.loads(result.stdout)
         streams = data.get("streams", [])
         if streams:
@@ -35,7 +36,7 @@ def has_video_stream(filepath: str) -> bool:
         "-show_streams", "-select_streams", "v:0", filepath
     ]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30, **hidden_subprocess_kwargs())
         data = json.loads(result.stdout or "{}")
         return bool(data.get("streams", []))
     except Exception as e:
@@ -52,7 +53,7 @@ def available_encoders() -> set[str]:
     try:
         result = subprocess.run(
             [ffmpeg, "-hide_banner", "-encoders"],
-            capture_output=True, text=True, timeout=10
+            capture_output=True, text=True, timeout=10, **hidden_subprocess_kwargs()
         )
         return set(result.stdout.split())
     except Exception:
@@ -137,7 +138,7 @@ class ConvertWorker(QThread):
         try:
             cmd = [ffprobe, "-v", "quiet", "-print_format", "json",
                    "-show_format", self.filepath]
-            r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=30, **hidden_subprocess_kwargs())
             data = json.loads(r.stdout)
             dur = float(data.get("format", {}).get("duration", 0))
             return dur
@@ -180,6 +181,7 @@ class ConvertWorker(QThread):
             text=True,
             encoding="utf-8",
             errors="replace",
+            **hidden_subprocess_kwargs(),
         )
         
         out_time_us = 0

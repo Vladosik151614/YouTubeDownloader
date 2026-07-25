@@ -12,6 +12,7 @@ from urllib.request import Request, urlopen
 
 from PySide6.QtCore import QThread, Signal
 from app.logger import logger
+from app.process_utils import hidden_subprocess_kwargs
 
 APP_VERSION = "0.1.0"
 
@@ -40,7 +41,7 @@ class UpdateWorker(QThread):
         try:
             logger.info("Starting download-system update check & upgrade...")
             cmd = [sys.executable, "-m", "pip", "install", "--upgrade", "yt-dlp"]
-            res = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=120, **hidden_subprocess_kwargs())
             if res.returncode == 0:
                 output = res.stdout.strip()
                 if "Requirement already satisfied" in output:
