@@ -99,8 +99,12 @@ def main() -> int:
     patch_owner_imports(target)
     run([sys.executable, "tools\\privacy_check.py"], target)
     run(["git", "add", "-A"], target)
-    run(["git", "commit", "-m", message], target)
-    run(["git", "push", "origin", "main"], target, timeout=240)
+    status = subprocess.run(["git", "status", "--porcelain"], cwd=target, text=True, capture_output=True)
+    if status.stdout.strip():
+        run(["git", "commit", "-m", message], target)
+        run(["git", "push", "origin", "main"], target, timeout=240)
+    else:
+        print("Public repository already matches sanitized source.")
     print("Public repository updated without owner-only tools.")
     return 0
 
