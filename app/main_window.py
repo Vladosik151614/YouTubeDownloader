@@ -357,7 +357,7 @@ class MainWindow(QMainWindow):
         reply = QMessageBox.question(
             self,
             "Обновление приложения",
-            f"Доступна новая версия {info.get('version')}.\n\nСкачать и установить обновление?",
+            f"Доступна новая версия {info.get('version')}.\n\nСкачать и запустить обновленную версию?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if reply != QMessageBox.StandardButton.Yes:
@@ -377,18 +377,18 @@ class MainWindow(QMainWindow):
         reply = QMessageBox.question(
             self,
             "Обновление приложения",
-            "Установщик обновления скачан. Закрыть приложение и запустить установку?",
+            "Обновленная версия скачана. Закрыть приложение и запустить новый файл?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if reply != QMessageBox.StandardButton.Yes:
             return
         try:
-            subprocess.Popen([path, "/SILENT", "/NORESTART"], **hidden_subprocess_kwargs())
+            subprocess.Popen([path], **hidden_subprocess_kwargs())
             if self._tray:
                 self._tray.allow_close = True
             QApplication.quit()
         except Exception as exc:
-            QMessageBox.warning(self, "Обновление приложения", f"Не удалось запустить установщик:\n{exc}")
+            QMessageBox.warning(self, "Обновление приложения", f"Не удалось запустить обновление:\n{exc}")
 
     def _notify(self, title: str, message: str):
         if self._tray:

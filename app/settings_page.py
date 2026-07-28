@@ -303,7 +303,7 @@ class SettingsPage(QWidget):
         self.browser_combo.setCurrentIndex(max(0, self.browser_combo.findText(self.settings.get("cookies_from_browser", ""))))
         self.cookies_file_edit.setText(self.settings.get("cookies_file", ""))
         self.github_repo_edit.setText(self.settings.get("github_update_repo", ""))
-        self.github_asset_edit.setText(self.settings.get("github_update_asset", "YouTubeDownloaderSetup"))
+        self.github_asset_edit.setText(self.settings.get("github_update_asset", "YouTubeDownloader"))
         self._load_codecs()
         self._set_switches()
         self._update_encoder_status()
@@ -450,7 +450,7 @@ class SettingsPage(QWidget):
             "cookies_from_browser": "" if browser_text.startswith("(") else browser_text,
             "cookies_file": self.cookies_file_edit.text(),
             "github_update_repo": self.github_repo_edit.text().strip(),
-            "github_update_asset": self.github_asset_edit.text().strip() or "YouTubeDownloaderSetup",
+            "github_update_asset": self.github_asset_edit.text().strip() or "YouTubeDownloader",
         })
         for attr, key in {
             "background_on_close_sw": "background_on_close",

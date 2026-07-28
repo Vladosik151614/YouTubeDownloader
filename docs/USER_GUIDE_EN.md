@@ -16,46 +16,44 @@ Supported workflows:
 
 Account sign-in is optional. It is only needed when the service itself requires login, age confirmation or account-limited access.
 
-## Installation
+## Start The App
 
-### Normal Installer
+### Portable Build
 
-1. Run `YouTubeDownloaderSetup-0.1.1.exe`.
-2. Choose the installer language.
-3. Accept the user agreement.
-4. Keep the default install folder or choose your own.
-5. Finish the installation and launch the app.
+1. Run `YouTubeDownloader-0.1.1-portable.exe`.
+2. Windows may show SmartScreen on the first launch. Check the file source and allow it only if it was downloaded from the official GitHub release.
+3. The app opens directly without an installer wizard.
 
-The installer uses a per-user Windows folder and does not require administrator rights.
+The portable app stores settings and logs in the Windows user profile and does not require administrator rights.
 
 ### Portable Launch
 
 You can also run `YouTubeDownloader.exe` directly. This is useful for quick checks and development.
 
-### PowerShell Install Command
+### PowerShell Launch Command
 
-This command downloads the latest installer from GitHub Releases to the Windows temp folder and starts the normal installer wizard:
-
-```powershell
-irm "https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.1.exe" -OutFile "$env:TEMP\YouTubeDownloaderSetup.exe"; Start-Process "$env:TEMP\YouTubeDownloaderSetup.exe" -Wait
-```
-
-Silent install without windows:
+This command downloads the latest portable build from GitHub Releases to the Windows temp folder and starts it:
 
 ```powershell
-$url = "https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.1.exe"
-$installer = "$env:TEMP\YouTubeDownloaderSetup.exe"
-Invoke-WebRequest $url -OutFile $installer
-Start-Process $installer -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" -Wait
+irm "https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloader-0.1.1-portable.exe" -OutFile "$env:TEMP\YouTubeDownloader.exe"; Start-Process "$env:TEMP\YouTubeDownloader.exe"
 ```
 
-Local installer when the setup file is already downloaded next to PowerShell:
+Longer command:
 
 ```powershell
-.\YouTubeDownloaderSetup-0.1.1.exe
+$url = "https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloader-0.1.1-portable.exe"
+$app = "$env:TEMP\YouTubeDownloader.exe"
+Invoke-WebRequest $url -OutFile $app
+Start-Process $app
 ```
 
-Later, a `winget` manifest can make the install command shorter:
+Local run when the portable file is already downloaded next to PowerShell:
+
+```powershell
+.\YouTubeDownloader-0.1.1-portable.exe
+```
+
+Later, a `winget` manifest can make installation shorter:
 
 ```powershell
 winget install <publisher>.YouTubeDownloader
@@ -227,5 +225,6 @@ python tools\privacy_check.py
 - Twitch.
 - TikTok, considering possible network restrictions.
 - Pause, continue, cancel and retry.
-- Install and uninstall through `YouTubeDownloaderSetup-0.1.1.exe`.
+- Run through `YouTubeDownloader-0.1.1-portable.exe`.
+
 
