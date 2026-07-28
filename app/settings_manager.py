@@ -99,7 +99,7 @@ def _read_settings_file(path: str) -> dict | None:
             merged["download_folder"] = _default_download_folder()
         if merged.get("theme") not in {"lux_graphite", "lux_midnight", "lux_silver"}:
             merged["theme"] = "lux_graphite"
-        if merged.get("language") not in {"en", "de", "it"}:
+        if merged.get("language") not in {"ru", "en", "de", "it"}:
             merged["language"] = "en"
         return merged
     except Exception:

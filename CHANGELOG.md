@@ -19,12 +19,9 @@ All notable public release changes should be documented here.
 - Fixed settings layout overflow that caused an unnecessary horizontal scrollbar.
 - Expanded the client developer mode into Diagnostics, Logs, Network, Access, Video, Files, Experiments and Support Package tabs.
 - Added client-safe developer-mode recommendations for diagnostics, access, network, codecs and support reports.
-- Changed the default language to English and limited the language selector to English, German and Italian.
+- Changed the default language to English and kept Russian, English, German and Italian in the language selector.
 - Reworked runtime translations for the main screens, settings, queue, history, accounts and developer diagnostics.
 - Added stylesheet caching and thumbnail caching to reduce repeated UI work.
-- Added owner-only fix report editor for writing maintainer notes that appear in the in-app Fixes page on the owner build.
-- Added owner-only public publishing workflow that exports a sanitized copy without owner tools before pushing to the public repository.
-- Added owner-only diagnostics for recent logs, error summaries, privacy/quality checks and TXT report export.
 - Changed the main action flow: Paste Link now only fills the URL field, and Download starts the queue item.
 - Added a quick codec selector with Original/H.264/VP9/AV1 options.
 - Added a setting to ask before codec conversion; playlist conversion asks once per playlist, single videos ask per item.

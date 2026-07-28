@@ -31,9 +31,6 @@ Added:
 - Developer-mode recommendations for safe client diagnostics.
 - English as the default language with improved German and Italian localization.
 - Theme stylesheet cache and queue thumbnail cache for smoother UI updates.
-- Owner-only fix report editor for maintainer notes.
-- Owner-only public push workflow that strips owner tools before publishing.
-- Owner-only log/error diagnostics and TXT report export.
 - Quick codec selector on the main screen.
 - Optional prompt before codec conversion.
 - In-app bug-fix report page with severity colors.

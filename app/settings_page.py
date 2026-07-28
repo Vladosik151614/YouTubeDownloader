@@ -125,7 +125,7 @@ class SettingsPage(QWidget):
         form.addRow("Тема:", self.theme_combo)
 
         self.language_combo = QComboBox()
-        self.language_combo.addItems(["English", "Deutsch", "Italiano"])
+        self.language_combo.addItems(["Русский", "English", "Deutsch", "Italiano"])
         form.addRow("Язык:", self.language_combo)
 
         self._switch(form, "background_on_close_sw", "Переходить в фоновый режим при закрытии окна")
@@ -286,7 +286,7 @@ class SettingsPage(QWidget):
     def _load_values(self):
         self.folder_edit.setText(self.settings.get("download_folder", "C:\\"))
         self.theme_combo.setCurrentIndex(THEME_INDEX.get(self.settings.get("theme", "lux_graphite"), 0))
-        self.language_combo.setCurrentIndex({"en": 0, "de": 1, "it": 2}.get(self.settings.get("language", "en"), 0))
+        self.language_combo.setCurrentIndex({"ru": 0, "en": 1, "de": 2, "it": 3}.get(self.settings.get("language", "en"), 1))
         self.download_type_combo.setCurrentIndex({"video": 0, "audio": 1, "pictures": 2, "documents": 3}.get(self.settings.get("download_type", "video"), 0))
         self.quality_combo.setCurrentIndex({"best": 0, "2160": 1, "1440": 2, "1080": 3, "720": 4, "480": 5}.get(str(self.settings.get("download_quality", "1080")), 3))
         self.fps_combo.setCurrentIndex({"best": 0, "60": 1, "30": 2}.get(str(self.settings.get("fps_limit", "best")), 0))
@@ -422,7 +422,7 @@ class SettingsPage(QWidget):
             "encoding": {0: "gpu_auto", 1: "gpu_only", 2: "cpu_only"},
             "encoder": {0: "auto", 1: "h264_nvenc", 2: "h264_qsv", 3: "h264_amf", 4: "libx264"},
             "theme": THEME_BY_INDEX,
-            "language": {0: "en", 1: "de", 2: "it"},
+            "language": {0: "ru", 1: "en", 2: "de", 3: "it"},
             "speed": {0: "unlimited", 1: "50m", 2: "25m", 3: "10m", 4: "4m", 5: "2m"},
             "codec": {0: "original", 1: "h264", 2: "vp9", 3: "av1"},
         }

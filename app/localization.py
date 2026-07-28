@@ -360,7 +360,7 @@ IT = EN | {
 }
 
 
-TRANSLATIONS = {"en": EN, "de": DE, "it": IT}
+TRANSLATIONS = {"ru": {}, "en": EN, "de": DE, "it": IT}
 
 
 def _source_text(text: str) -> str:
