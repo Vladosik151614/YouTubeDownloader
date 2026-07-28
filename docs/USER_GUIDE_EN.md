@@ -1,6 +1,6 @@
 # User Guide
 
-App version: `0.1.0`
+App version: `0.1.1`
 
 ## What It Is
 
@@ -20,7 +20,7 @@ Account sign-in is optional. It is only needed when the service itself requires 
 
 ### Normal Installer
 
-1. Run `YouTubeDownloaderSetup-0.1.0.exe`.
+1. Run `YouTubeDownloaderSetup-0.1.1.exe`.
 2. Choose the installer language.
 3. Accept the user agreement.
 4. Keep the default install folder or choose your own.
@@ -37,13 +37,13 @@ You can also run `YouTubeDownloader.exe` directly. This is useful for quick chec
 This command downloads the latest installer from GitHub Releases to the Windows temp folder and starts the normal installer wizard:
 
 ```powershell
-irm "https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.0.exe" -OutFile "$env:TEMP\YouTubeDownloaderSetup.exe"; Start-Process "$env:TEMP\YouTubeDownloaderSetup.exe" -Wait
+irm "https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.1.exe" -OutFile "$env:TEMP\YouTubeDownloaderSetup.exe"; Start-Process "$env:TEMP\YouTubeDownloaderSetup.exe" -Wait
 ```
 
 Silent install without windows:
 
 ```powershell
-$url = "https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.0.exe"
+$url = "https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.1.exe"
 $installer = "$env:TEMP\YouTubeDownloaderSetup.exe"
 Invoke-WebRequest $url -OutFile $installer
 Start-Process $installer -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" -Wait
@@ -52,7 +52,7 @@ Start-Process $installer -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART
 Local installer when the setup file is already downloaded next to PowerShell:
 
 ```powershell
-.\YouTubeDownloaderSetup-0.1.0.exe
+.\YouTubeDownloaderSetup-0.1.1.exe
 ```
 
 Later, a `winget` manifest can make the install command shorter:
@@ -227,4 +227,5 @@ python tools\privacy_check.py
 - Twitch.
 - TikTok, considering possible network restrictions.
 - Pause, continue, cancel and retry.
-- Install and uninstall through `YouTubeDownloaderSetup-0.1.0.exe`.
+- Install and uninstall through `YouTubeDownloaderSetup-0.1.1.exe`.
+

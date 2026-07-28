@@ -94,4 +94,3 @@ For release builds, the app provides a sanitized error report that can be copied
 
 ## Maintainer Tools
 
-The GitHub push panel is hidden for normal users. It appears only on the maintainer computer when the local owner flag exists and GitHub CLI is authenticated as the project owner. Before pushing, it runs privacy and quality checks and refuses to continue when generated folders, local config files, cookies, logs or tokens are detected.

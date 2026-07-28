@@ -13,8 +13,10 @@ from app.download_utils import (
     YtDlpLogCollector,
     format_bytes,
     is_playlist,
+    playlist_entry_rows,
     rate_limit_bytes,
     set_sleep_prevention,
+    thumbnail_url,
 )
 from app.path_manager import service_output_folder
 from app.proxy_config import proxy_url_from_settings
@@ -28,11 +30,17 @@ class DownloadWorker(QThread):
         status(item_id, text)
         finished(item_id, filepath, success, error_msg)
         info_ready(item_id, title, is_playlist, entries_count, estimated_size_str)
+        thumbnail_ready(item_id, thumbnail_url)
+        playlist_items_ready(item_id, entries)
+        playlist_item_progress(item_id, playlist_index, status, percent)
     """
     progress = Signal(str, float, str, str)
     status = Signal(str, str)
     finished = Signal(str, str, bool, str)
     info_ready = Signal(str, str, bool, int, str)
+    thumbnail_ready = Signal(str, str)
+    playlist_items_ready = Signal(str, list)
+    playlist_item_progress = Signal(str, int, str, float)
 
     def __init__(self, item_id: str, url: str, output_folder: str, settings: dict, parent=None):
         super().__init__(parent)
@@ -64,6 +72,8 @@ class DownloadWorker(QThread):
             raise yt_dlp.utils.DownloadCancelled("Отменено пользователем")
         
         status = d.get("status", "")
+        info = d.get("info_dict") or {}
+        playlist_index = info.get("playlist_index")
         if status == "downloading":
             total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
             downloaded = d.get("downloaded_bytes", 0)
@@ -71,8 +81,12 @@ class DownloadWorker(QThread):
             speed = d.get("_speed_str", "—")
             eta = d.get("_eta_str", "—")
             self.progress.emit(self.item_id, percent, speed, eta)
+            if isinstance(playlist_index, int):
+                self.playlist_item_progress.emit(self.item_id, playlist_index, "Загрузка...", percent)
         elif status == "finished":
             self.status.emit(self.item_id, "Обработка файла...")
+            if isinstance(playlist_index, int):
+                self.playlist_item_progress.emit(self.item_id, playlist_index, "Обработка...", 100.0)
 
     def _build_ydl_opts(self) -> dict:
         ffmpeg_bin = get_binary_path("ffmpeg")
@@ -367,6 +381,9 @@ class DownloadWorker(QThread):
 
             size_str = format_bytes(total_size)
             self.info_ready.emit(self.item_id, title, pl, count, size_str)
+            self.thumbnail_ready.emit(self.item_id, thumbnail_url(info))
+            if pl:
+                self.playlist_items_ready.emit(self.item_id, playlist_entry_rows(entries))
             
             self.status.emit(self.item_id, "Загрузка...")
             logger.info(f"[{self.item_id}] Downloading {title} (Плейлист: {pl}, видео: {count}, размер: {size_str})")

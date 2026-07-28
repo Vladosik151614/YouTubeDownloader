@@ -1,5 +1,5 @@
 """
-converter.py — определение кодека и аппаратно-ускоренная конвертация в H.264/MP4 через NVIDIA NVENC / ffmpeg
+converter.py — probing and post-download video codec conversion through ffmpeg.
 """
 import os
 import json
@@ -46,6 +46,12 @@ def has_video_stream(filepath: str) -> bool:
 
 def is_h264(filepath: str) -> bool:
     return probe_codec(filepath) == "h264"
+
+
+def normalized_target_codec(settings: dict) -> str:
+    codec = str(settings.get("default_codec", "original")).lower()
+    aliases = {"avc": "h264", "x264": "h264", "copy": "original", "source": "original"}
+    return aliases.get(codec, codec if codec in {"original", "h264", "vp9", "av1"} else "original")
 
 
 def available_encoders() -> set[str]:
@@ -97,10 +103,21 @@ def _select_h264_encoder(settings: dict) -> tuple[str, list[str], str]:
     raise RuntimeError("Не найден доступный H.264 энкодер для выбранного режима")
 
 
+def _select_video_codec(settings: dict) -> tuple[str, list[str], str, str]:
+    target = normalized_target_codec(settings)
+    if target == "h264":
+        encoder, args, label = _select_h264_encoder(settings)
+        return encoder, args, label, ".mp4"
+    if target == "vp9":
+        return "libvpx-vp9", ["-crf", "30", "-b:v", "0", "-row-mt", "1"], "VP9", ".webm"
+    if target == "av1":
+        return "libaom-av1", ["-crf", "30", "-b:v", "0", "-cpu-used", "6"], "AV1", ".mkv"
+    raise RuntimeError("Кодек оставлен оригинальным, конвертация не требуется")
+
+
 class ConvertWorker(QThread):
     """
-    Конвертирует видеофайл в H.264/AAC MP4.
-    Приоритет кодирования — аппаратное ускорение NVIDIA NVENC.
+    Конвертирует видеофайл в выбранный кодек.
     Сигналы:
         progress(filepath, percent)
         finished(filepath, out_path, success, error_msg)
@@ -147,13 +164,14 @@ class ConvertWorker(QThread):
 
     def _convert(self):
         keep_originals = self.settings.get("keep_originals", False)
-        encoder, preset_args, encoder_label = _select_h264_encoder(self.settings)
+        encoder, preset_args, encoder_label, output_ext = _select_video_codec(self.settings)
         logger.info(f"Using {encoder_label} for encoding: {self.filepath}")
         self.log_line.emit(self.filepath, f"Кодирование: {encoder_label}")
         
         base, _ = os.path.splitext(self.filepath)
-        out_path = base + "_h264.mp4"
-        if self.filepath.endswith("_h264.mp4"):
+        suffix = normalized_target_codec(self.settings)
+        out_path = base + f"_{suffix}{output_ext}"
+        if self.filepath.endswith(out_path):
             out_path = base + "_conv.mp4"
         
         ffmpeg = get_binary_path("ffmpeg")
@@ -164,13 +182,12 @@ class ConvertWorker(QThread):
             "-i", self.filepath,
             "-c:v", encoder,
         ] + preset_args + [
-            "-c:a", "aac",
-            "-b:a", "192k",
-            "-movflags", "+faststart",
-            "-progress", "pipe:1",
-            "-nostats",
-            out_path,
+            "-c:a", "aac" if output_ext == ".mp4" else "libopus",
+            "-b:a", "192k" if output_ext == ".mp4" else "160k",
         ]
+        if output_ext == ".mp4":
+            cmd += ["-movflags", "+faststart"]
+        cmd += ["-progress", "pipe:1", "-nostats", out_path]
         
         logger.info(f"Running ffmpeg: {' '.join(cmd)}")
         

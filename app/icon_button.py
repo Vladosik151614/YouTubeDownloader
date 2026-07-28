@@ -16,6 +16,8 @@ class ActionIconButton(QPushButton):
         "retry": "#67b7ff",
         "folder": "#f0b84a",
         "details": "#c78cff",
+        "expand": "#d7d7d7",
+        "collapse": "#d7d7d7",
     }
 
     def __init__(self, action: str, tooltip: str, parent=None):
@@ -69,3 +71,17 @@ class ActionIconButton(QPushButton):
             painter.setPen(QPen(QColor("#202020"), 2.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
             painter.drawLine(int(cx), int(cy - 4), int(cx), int(cy + 2))
             painter.drawPoint(int(cx), int(cy + 6))
+        elif self.action == "expand":
+            path = QPainterPath()
+            path.moveTo(cx - 3, cy - 7)
+            path.lineTo(cx + 5, cy)
+            path.lineTo(cx - 3, cy + 7)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawPath(path)
+        elif self.action == "collapse":
+            path = QPainterPath()
+            path.moveTo(cx - 7, cy - 3)
+            path.lineTo(cx, cy + 5)
+            path.lineTo(cx + 7, cy - 3)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawPath(path)

@@ -4,7 +4,7 @@ These rules are the local refactoring guardrails for the project. They are meant
 
 ## Version
 
-- Public app version stays `0.1.0` until the first GitHub release is prepared.
+- Public app version is `0.1.1` for the current release track.
 - Version text must be changed in one intentional versioning pass, not during unrelated UI fixes.
 
 ## File Size Limits

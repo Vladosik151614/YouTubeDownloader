@@ -22,7 +22,7 @@ QPushButton#nav_btn {
     color: #8892b0;
     border: none;
     border-radius: 6px;
-    padding: 10px 12px;
+    padding: 8px 12px 8px 38px;
     text-align: left;
     font-size: 13px;
 }
@@ -173,56 +173,62 @@ QStatusBar {
 
 
 THEMES = {
-    "graphite_red": {
-        "bg": "#191919",
-        "panel": "#242424",
-        "panel_alt": "#2d2d2d",
-        "control": "#333333",
-        "control_hover": "#3f3f3f",
-        "control_pressed": "#202020",
-        "border": "#3a3a3a",
-        "accent": "#e5485f",
-        "accent_alt": "#b82d47",
-        "accent_hover": "#ff5c72",
-        "info": "#d7d7d7",
-        "text": "#eeeeee",
-        "muted": "#a7a7a7",
+    "lux_graphite": {
+        "bg": "#111214",
+        "panel": "#1b1d21",
+        "panel_alt": "#24272d",
+        "control": "#2d3138",
+        "control_hover": "#383d46",
+        "control_pressed": "#181a1f",
+        "border": "#3e434d",
+        "accent": "#ef476f",
+        "accent_alt": "#b82f51",
+        "accent_hover": "#ff6b8c",
+        "info": "#52d6c9",
+        "text": "#f4f4f5",
+        "muted": "#a8adb7",
     },
-    "graphite_purple": {
-        "bg": "#18171c",
-        "panel": "#24222b",
-        "panel_alt": "#302d3a",
-        "control": "#35323f",
-        "control_hover": "#443f52",
-        "control_pressed": "#24212c",
-        "border": "#474150",
-        "accent": "#8f5cff",
-        "accent_alt": "#6f3fd3",
-        "accent_hover": "#a77cff",
-        "info": "#d6d0e5",
-        "text": "#f0edf7",
-        "muted": "#aaa3b8",
+    "lux_midnight": {
+        "bg": "#101116",
+        "panel": "#191b23",
+        "panel_alt": "#242735",
+        "control": "#2b3040",
+        "control_hover": "#394056",
+        "control_pressed": "#171a24",
+        "border": "#42495c",
+        "accent": "#b88cff",
+        "accent_alt": "#8057d8",
+        "accent_hover": "#d0adff",
+        "info": "#f5c45e",
+        "text": "#f1f2f6",
+        "muted": "#a9afc0",
     },
-    "light_gray": {
-        "bg": "#eeeeee",
-        "panel": "#f8f8f8",
-        "panel_alt": "#e6e6e6",
-        "control": "#dedede",
-        "control_hover": "#d2d2d2",
-        "control_pressed": "#c4c4c4",
-        "border": "#c7c7c7",
-        "accent": "#c83d55",
-        "accent_alt": "#a52e43",
-        "accent_hover": "#dd5268",
-        "info": "#2d2d2d",
-        "text": "#1f1f1f",
-        "muted": "#666666",
+    "lux_silver": {
+        "bg": "#f1f2f4",
+        "panel": "#ffffff",
+        "panel_alt": "#e7e9ed",
+        "control": "#d9dde4",
+        "control_hover": "#cbd1dc",
+        "control_pressed": "#bcc3cf",
+        "border": "#bfc5d0",
+        "accent": "#b92f5a",
+        "accent_alt": "#8f2447",
+        "accent_hover": "#d84a72",
+        "info": "#2364aa",
+        "text": "#1d222a",
+        "muted": "#667080",
     },
 }
 
+_QSS_CACHE: dict[str, str] = {}
+
 
 def app_qss(theme_name: str) -> str:
-    p = THEMES.get(theme_name, THEMES["graphite_red"])
+    if theme_name not in {"lux_graphite", "lux_midnight", "lux_silver"}:
+        theme_name = "lux_graphite"
+    if theme_name in _QSS_CACHE:
+        return _QSS_CACHE[theme_name]
+    p = THEMES.get(theme_name, THEMES["lux_graphite"])
     qss = DARK_QSS
     replacements = {
         "#1a1a2e": p["bg"],
@@ -245,6 +251,57 @@ QFrame#tool_band {{
     background: {p["panel"]};
     border: 1px solid {p["border"]};
     border-radius: 8px;
+}}
+QTabWidget::pane {{
+    background: {p["panel"]};
+    border: 1px solid {p["border"]};
+    border-radius: 6px;
+    top: -1px;
+}}
+QTabBar::tab {{
+    background: {p["control_pressed"]};
+    color: {p["text"]};
+    border: 1px solid {p["border"]};
+    border-bottom: none;
+    padding: 7px 13px;
+    margin-right: 2px;
+    border-top-left-radius: 5px;
+    border-top-right-radius: 5px;
+}}
+QTabBar::tab:selected {{
+    background: {p["panel"]};
+    color: {p["text"]};
+    font-weight: 700;
+}}
+QTabBar::tab:hover {{
+    background: {p["control_hover"]};
+}}
+QGroupBox {{
+    background: {p["panel_alt"]};
+    border: 1px solid {p["border"]};
+    color: {p["text"]};
+}}
+QGroupBox::title {{
+    background: {p["panel_alt"]};
+    color: {p["muted"]};
+    padding: 0px 5px;
+}}
+QLabel {{
+    color: {p["text"]};
+}}
+QLineEdit, QComboBox {{
+    background: {p["panel"]};
+    border: 1px solid {p["border"]};
+    color: {p["text"]};
+}}
+QComboBox QAbstractItemView {{
+    background: {p["panel"]};
+    color: {p["text"]};
+    selection-background-color: {p["accent"]};
+}}
+QScrollBar:horizontal {{
+    background: transparent;
+    height: 0px;
 }}
 QFrame#smart_card {{
     background: {p["panel_alt"]};
@@ -279,5 +336,6 @@ QPushButton#action_icon_btn:pressed {{
     background: {p["control_pressed"]};
 }}
 """
+    _QSS_CACHE[theme_name] = qss
     return qss
 

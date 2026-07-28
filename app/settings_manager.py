@@ -33,8 +33,9 @@ DEFAULTS = {
     "download_quality": "1080",
     "fps_limit": "60",
     "container": "mp4",
-    "default_codec": "h264",
-    "auto_convert": True,
+    "default_codec": "original",
+    "auto_convert": False,
+    "ask_before_codec_convert": True,
     "encoding_mode": "gpu_auto",
     "video_encoder": "auto",
     "prefer_gpu": True,
@@ -47,7 +48,7 @@ DEFAULTS = {
     "github_update_asset": "YouTubeDownloaderSetup",
     "background_on_close": False,
     "launch_on_startup": False,
-    "language": "ru",
+    "language": "en",
     "playlist_subfolders": True,
     "playlist_numbering": True,
     "auto_route_folders": True,
@@ -81,7 +82,7 @@ DEFAULTS = {
     "download_stats": False,
     "developer_mode": False,
     "avoid_duplicate_names": False,
-    "theme": "graphite_red",
+    "theme": "lux_graphite",
 }
 
 def _read_settings_file(path: str) -> dict | None:
@@ -90,9 +91,16 @@ def _read_settings_file(path: str) -> dict | None:
             data = json.load(f)
         merged = dict(DEFAULTS)
         merged.update(data)
+        if "ask_before_codec_convert" not in data and data.get("default_codec") == "h264":
+            merged["default_codec"] = "original"
+            merged["auto_convert"] = False
         current_folder = str(merged.get("download_folder", "")).replace("\\", "/")
         if current_folder == _legacy_default_download_folder():
             merged["download_folder"] = _default_download_folder()
+        if merged.get("theme") not in {"lux_graphite", "lux_midnight", "lux_silver"}:
+            merged["theme"] = "lux_graphite"
+        if merged.get("language") not in {"en", "de", "it"}:
+            merged["language"] = "en"
         return merged
     except Exception:
         return None

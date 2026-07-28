@@ -39,7 +39,7 @@ def main():
     set_windows_app_id()
     app = QApplication(sys.argv)
     app.setApplicationName("YouTube Downloader")
-    app.setApplicationVersion("0.1.0")
+    app.setApplicationVersion("0.1.1")
     app.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps)
 
     icon_path = get_resource_path("youtube.ico")

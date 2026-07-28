@@ -7,25 +7,21 @@ import winreg
 
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
-    QFileDialog,
-    QFormLayout,
-    QGroupBox,
-    QHBoxLayout,
-    QLabel,
-    QLineEdit,
-    QMessageBox,
-    QPushButton,
-    QComboBox,
-    QTabWidget,
-    QVBoxLayout,
-    QWidget,
+    QFileDialog, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
+    QPushButton, QComboBox, QTabWidget, QVBoxLayout, QWidget,
 )
 
 from app.converter import available_encoders
+from app.settings_developer import build_developer_tab
 from app.settings_manager import save_settings
 from app.speed_test import SpeedTestWorker
 from app.toggle_switch import ToggleSwitch
 from app.updater import AppUpdateWorker, UpdateWorker
+
+
+THEME_OPTIONS = (("lux_graphite", "Люкс графит"), ("lux_midnight", "Люкс ночная"), ("lux_silver", "Люкс светлая"))
+THEME_INDEX = {key: index for index, (key, _) in enumerate(THEME_OPTIONS)}
+THEME_BY_INDEX = {index: key for index, (key, _) in enumerate(THEME_OPTIONS)}
 
 
 def _apply_startup(enabled: bool):
@@ -78,6 +74,7 @@ class SettingsPage(QWidget):
         row.addStretch()
         save_btn = QPushButton("Сохранить")
         save_btn.setObjectName("primary_btn")
+        save_btn.setMaximumWidth(150)
         save_btn.clicked.connect(self._save)
         row.addWidget(save_btn)
         layout.addLayout(row)
@@ -93,6 +90,8 @@ class SettingsPage(QWidget):
         group = QGroupBox(title)
         form = QFormLayout(group)
         form.setSpacing(12)
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         parent_layout.addWidget(group)
         return form
 
@@ -122,11 +121,11 @@ class SettingsPage(QWidget):
         self._switch(form, "auto_route_folders_sw", "Автоматически раскладывать загрузки по сервисам и типам")
 
         self.theme_combo = QComboBox()
-        self.theme_combo.addItems(["Графит + красный", "Графит + фиолетовый", "Светло-серый"])
+        self.theme_combo.addItems([label for _, label in THEME_OPTIONS])
         form.addRow("Тема:", self.theme_combo)
 
         self.language_combo = QComboBox()
-        self.language_combo.addItems(["Русский", "English", "Deutsch", "Italiano"])
+        self.language_combo.addItems(["English", "Deutsch", "Italiano"])
         form.addRow("Язык:", self.language_combo)
 
         self._switch(form, "background_on_close_sw", "Переходить в фоновый режим при закрытии окна")
@@ -136,7 +135,9 @@ class SettingsPage(QWidget):
         self._switch(form, "beta_updates_sw", "Устанавливать бета-версии")
         self.app_update_status_label = QLabel("Проверка обновлений использует GitHub Releases после настройки репозитория.")
         self.app_update_status_label.setObjectName("subtle")
+        self.app_update_status_label.setWordWrap(True)
         app_update_btn = QPushButton("Проверить обновление приложения")
+        app_update_btn.setMaximumWidth(250)
         app_update_btn.clicked.connect(self._run_app_update_check)
         row = QHBoxLayout()
         row.addWidget(self.app_update_status_label, 1)
@@ -156,18 +157,14 @@ class SettingsPage(QWidget):
         self.quality_combo = QComboBox()
         self.quality_combo.addItems(["Лучшее", "2160p", "1440p", "1080p", "720p", "480p"])
         form.addRow("Качество:", self.quality_combo)
-
         self.fps_combo = QComboBox()
         self.fps_combo.addItems(["Лучшее", "60 FPS", "30 FPS"])
         form.addRow("Кадры:", self.fps_combo)
-
         self.container_combo = QComboBox()
         self.container_combo.addItems(["MP4", "MKV", "WebM"])
         form.addRow("Контейнер:", self.container_combo)
-
         self.codec_combo = QComboBox()
         form.addRow("Кодек:", self.codec_combo)
-
         self.encoding_mode_combo = QComboBox()
         self.encoding_mode_combo.addItems(["Авто: видеокарта, потом процессор", "Только видеокарта", "Только процессор"])
         form.addRow("Режим:", self.encoding_mode_combo)
@@ -180,7 +177,8 @@ class SettingsPage(QWidget):
         self.encoder_status_label.setObjectName("subtle")
         form.addRow("Доступно:", self.encoder_status_label)
 
-        self._switch(form, "auto_convert_sw", "Автоматически перекодировать не-H.264 видео в H.264")
+        self._switch(form, "auto_convert_sw", "Автоматически менять кодек после скачивания, если выбран не оригинал")
+        self._switch(form, "ask_codec_convert_sw", "Спрашивать перед сменой кодека")
         self._switch(form, "keep_originals_sw", "Сохранять оригиналы после конвертации")
         self._switch(form, "show_all_codecs_sw", "Показывать AV1 и VP9")
         layout.addStretch()
@@ -279,65 +277,7 @@ class SettingsPage(QWidget):
         return page
 
     def _developer_tab(self):
-        page, layout = self._page()
-        intro = QGroupBox("Режим разработчика")
-        intro_row = QHBoxLayout(intro)
-        self.developer_mode_sw = ToggleSwitch()
-        self.developer_mode_sw.toggled.connect(self._set_developer_panel_visible)
-        text = QLabel("Показывать расширенную диагностику, логи и технические параметры")
-        text.setWordWrap(True)
-        intro_row.addWidget(self.developer_mode_sw)
-        intro_row.addWidget(text, 1)
-        layout.addWidget(intro)
-
-        self.developer_panel = QWidget()
-        panel_layout = QVBoxLayout(self.developer_panel)
-        panel_layout.setContentsMargins(0, 0, 0, 0)
-        panel_layout.setSpacing(12)
-
-        dev_tabs = QTabWidget()
-        panel_layout.addWidget(dev_tabs)
-
-        diag_page, diag_layout = self._page()
-        form = self._group("Диагностика", diag_layout)
-        self._switch(form, "download_stats_sw", "Отправлять статистику скачиваний")
-        self._switch(form, "show_download_tools_sw", "Показывать инструменты обработки")
-        dev_tabs.addTab(diag_page, "Диагностика")
-
-        system_page, system_layout = self._page()
-        form = self._group("Система загрузки", system_layout)
-        self._switch(form, "auto_update_engine_sw", "Автоматически проверять обновления системы загрузки")
-        self.github_repo_edit = QLineEdit()
-        self.github_repo_edit.setPlaceholderText("owner/repository")
-        form.addRow("GitHub Releases:", self.github_repo_edit)
-        self.github_asset_edit = QLineEdit()
-        self.github_asset_edit.setPlaceholderText("YouTubeDownloaderSetup")
-        form.addRow("Файл релиза:", self.github_asset_edit)
-        update_group = QGroupBox("Система загрузки")
-        row = QHBoxLayout(update_group)
-        self.update_status_label = QLabel("Система загрузки готова к работе.")
-        self.update_status_label.setObjectName("subtle")
-        self.update_btn = QPushButton("Обновить")
-        self.update_btn.clicked.connect(self._run_update)
-        row.addWidget(self.update_status_label, 1)
-        row.addWidget(self.update_btn)
-        system_layout.addWidget(update_group)
-        dev_tabs.addTab(system_page, "Система")
-
-        access_page, access_layout = self._page()
-        form = self._group("Ручной доступ", access_layout)
-        form.addRow("Браузер:", QLabel("Только для диагностики проблем доступа"))
-        form.addRow("Файл доступа:", QLabel("Только если автоматический режим не подходит"))
-        dev_tabs.addTab(access_page, "Доступ")
-
-        network_page, network_layout = self._page()
-        form = self._group("Сеть", network_layout)
-        form.addRow("Прокси:", QLabel("Подробные поля находятся в разделе Соединение"))
-        form.addRow("Лимиты:", QLabel("Используются системой загрузки напрямую"))
-        dev_tabs.addTab(network_page, "Сеть")
-        layout.addWidget(self.developer_panel)
-        layout.addStretch()
-        return page
+        return build_developer_tab(self)
 
     def _set_developer_panel_visible(self, visible: bool):
         if hasattr(self, "developer_panel"):
@@ -345,8 +285,8 @@ class SettingsPage(QWidget):
 
     def _load_values(self):
         self.folder_edit.setText(self.settings.get("download_folder", "C:\\"))
-        self.theme_combo.setCurrentIndex({"graphite_red": 0, "graphite_purple": 1, "light_gray": 2}.get(self.settings.get("theme", "graphite_red"), 0))
-        self.language_combo.setCurrentIndex({"ru": 0, "en": 1, "de": 2, "it": 3}.get(self.settings.get("language", "ru"), 0))
+        self.theme_combo.setCurrentIndex(THEME_INDEX.get(self.settings.get("theme", "lux_graphite"), 0))
+        self.language_combo.setCurrentIndex({"en": 0, "de": 1, "it": 2}.get(self.settings.get("language", "en"), 0))
         self.download_type_combo.setCurrentIndex({"video": 0, "audio": 1, "pictures": 2, "documents": 3}.get(self.settings.get("download_type", "video"), 0))
         self.quality_combo.setCurrentIndex({"best": 0, "2160": 1, "1440": 2, "1080": 3, "720": 4, "480": 5}.get(str(self.settings.get("download_quality", "1080")), 3))
         self.fps_combo.setCurrentIndex({"best": 0, "60": 1, "30": 2}.get(str(self.settings.get("fps_limit", "best")), 0))
@@ -370,11 +310,12 @@ class SettingsPage(QWidget):
 
     def _load_codecs(self):
         self.codec_combo.clear()
-        self.codec_combo.addItem("h264 (рекомендуется)")
+        self.codec_combo.addItems(["Оригинал", "h264 (рекомендуется)"])
         if self.settings.get("show_all_codecs", True):
             self.codec_combo.addItems(["vp9", "av1"])
-        codec = self.settings.get("default_codec", "h264")
-        self.codec_combo.setCurrentIndex(1 if codec == "vp9" and self.codec_combo.count() > 1 else 2 if codec == "av1" and self.codec_combo.count() > 2 else 0)
+        codec = self.settings.get("default_codec", "original")
+        indexes = {"original": 0, "h264": 1, "vp9": 2, "av1": 3}
+        self.codec_combo.setCurrentIndex(indexes.get(codec, 0) if indexes.get(codec, 0) < self.codec_combo.count() else 0)
 
     def _set_switches(self):
         pairs = {
@@ -384,7 +325,8 @@ class SettingsPage(QWidget):
             "auto_update_app_sw": ("auto_update_app", True),
             "auto_download_updates_sw": ("auto_download_updates", True),
             "beta_updates_sw": ("install_beta_updates", False),
-            "auto_convert_sw": ("auto_convert", True),
+            "auto_convert_sw": ("auto_convert", False),
+            "ask_codec_convert_sw": ("ask_before_codec_convert", True),
             "keep_originals_sw": ("keep_originals", False),
             "show_all_codecs_sw": ("show_all_codecs", True),
             "playlist_subfolders_sw": ("playlist_subfolders", True),
@@ -479,16 +421,16 @@ class SettingsPage(QWidget):
             "container": {0: "mp4", 1: "mkv", 2: "webm"},
             "encoding": {0: "gpu_auto", 1: "gpu_only", 2: "cpu_only"},
             "encoder": {0: "auto", 1: "h264_nvenc", 2: "h264_qsv", 3: "h264_amf", 4: "libx264"},
-            "theme": {0: "graphite_red", 1: "graphite_purple", 2: "light_gray"},
-            "language": {0: "ru", 1: "en", 2: "de", 3: "it"},
+            "theme": THEME_BY_INDEX,
+            "language": {0: "en", 1: "de", 2: "it"},
             "speed": {0: "unlimited", 1: "50m", 2: "25m", 3: "10m", 4: "4m", 5: "2m"},
-            "codec": {0: "h264", 1: "vp9", 2: "av1"},
+            "codec": {0: "original", 1: "h264", 2: "vp9", 3: "av1"},
         }
         browser_text = self.browser_combo.currentText()
         self.settings.update({
             "download_folder": self.folder_edit.text() or "C:\\",
-            "theme": maps["theme"].get(self.theme_combo.currentIndex(), "graphite_red"),
-            "language": maps["language"].get(self.language_combo.currentIndex(), "ru"),
+            "theme": maps["theme"].get(self.theme_combo.currentIndex(), "lux_graphite"),
+            "language": maps["language"].get(self.language_combo.currentIndex(), "en"),
             "download_type": maps["download_type"].get(self.download_type_combo.currentIndex(), "video"),
             "download_quality": maps["quality"].get(self.quality_combo.currentIndex(), "1080"),
             "fps_limit": maps["fps"].get(self.fps_combo.currentIndex(), "best"),
@@ -518,6 +460,7 @@ class SettingsPage(QWidget):
             "auto_download_updates_sw": "auto_download_updates",
             "beta_updates_sw": "install_beta_updates",
             "auto_convert_sw": "auto_convert",
+            "ask_codec_convert_sw": "ask_before_codec_convert",
             "keep_originals_sw": "keep_originals",
             "show_all_codecs_sw": "show_all_codecs",
             "playlist_subfolders_sw": "playlist_subfolders",

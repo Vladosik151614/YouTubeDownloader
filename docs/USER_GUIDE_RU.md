@@ -1,6 +1,6 @@
 # Руководство Пользователя
 
-Версия приложения: `0.1.0`
+Версия приложения: `0.1.1`
 
 ## Что Это
 
@@ -20,7 +20,7 @@ YouTube Downloader - desktop-приложение для Windows, которое
 
 ### Обычная Установка
 
-1. Запустите `YouTubeDownloaderSetup-0.1.0.exe`.
+1. Запустите `YouTubeDownloaderSetup-0.1.1.exe`.
 2. Выберите язык установщика.
 3. Примите пользовательское соглашение.
 4. Оставьте стандартную папку установки или выберите свою.
@@ -37,13 +37,13 @@ YouTube Downloader - desktop-приложение для Windows, которое
 Эта команда скачивает последний установщик с GitHub Release во временную папку Windows и запускает обычную установку с окном мастера:
 
 ```powershell
-irm "https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.0.exe" -OutFile "$env:TEMP\YouTubeDownloaderSetup.exe"; Start-Process "$env:TEMP\YouTubeDownloaderSetup.exe" -Wait
+irm "https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.1.exe" -OutFile "$env:TEMP\YouTubeDownloaderSetup.exe"; Start-Process "$env:TEMP\YouTubeDownloaderSetup.exe" -Wait
 ```
 
 Тихая установка без окон:
 
 ```powershell
-$url = "https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.0.exe"
+$url = "https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.1.exe"
 $installer = "$env:TEMP\YouTubeDownloaderSetup.exe"
 Invoke-WebRequest $url -OutFile $installer
 Start-Process $installer -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" -Wait
@@ -52,7 +52,7 @@ Start-Process $installer -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART
 Локальный установщик, если файл уже скачан рядом с PowerShell:
 
 ```powershell
-.\YouTubeDownloaderSetup-0.1.0.exe
+.\YouTubeDownloaderSetup-0.1.1.exe
 ```
 
 Позже можно добавить официальный `winget`-манифест. Тогда установка будет выглядеть так:
@@ -227,4 +227,5 @@ python tools\privacy_check.py
 - Twitch.
 - TikTok с учетом возможных сетевых ограничений.
 - Пауза, продолжение, отмена и повтор.
-- Установка и удаление через `YouTubeDownloaderSetup-0.1.0.exe`.
+- Установка и удаление через `YouTubeDownloaderSetup-0.1.1.exe`.
+

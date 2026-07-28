@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QLabel,
     QPushButton, QLineEdit, QFileDialog, QMessageBox, QStackedWidget,
     QFrame, QSizePolicy, QDialog, QListWidget, QListWidgetItem,
-    QDialogButtonBox, QScrollArea, QComboBox, QApplication
+    QDialogButtonBox, QComboBox, QApplication
 )
 from PySide6.QtCore import Qt, QSize, QTimer
 from PySide6.QtGui import QFont, QIcon, QColor
@@ -24,7 +24,7 @@ from app.accounts_page import AccountsPage
 from app.history_store import add_history_entry
 from app.queue_widget import QueueWidget
 from app.downloader import DownloadWorker
-from app.converter import probe_codec, is_h264, has_video_stream, ConvertWorker
+from app.converter import probe_codec, has_video_stream, normalized_target_codec, ConvertWorker
 from app.toggle_switch import ToggleSwitch
 from app.logger import logger
 from app.updater import AppUpdateWorker, UpdateWorker
@@ -32,9 +32,13 @@ from app.binary_manager import get_resource_path
 from app.link_preview import LinkPreviewWorker
 from app.support_dialog import SupportErrorDialog
 from app.tray_controller import TrayController
-from app.localization import apply_translations
-from app.owner_tools import OwnerToolsPage, owner_tools_available
+from app.localization import apply_translations, translate
+def owner_tools_available():
+    return False
+
+OwnerToolsPage = None
 from app.process_utils import hidden_subprocess_kwargs
+from app.sidebar_button import SidebarNavButton
 from app.fix_report_page import APP_VERSION, FixReportPage
 
 from app.theme import app_qss
@@ -129,17 +133,16 @@ class MainWindow(QMainWindow):
 
         self._nav_btns = []
         nav_items = [
-            ("⬇  Загрузка", 0),
-            ("⚙  Настройки", 1),
-            ("◷  История", 2),
-            ("◉  Аккаунты", 3),
-            ("◆  Исправления", 4),
+            ("download", "Загрузка", 0),
+            ("settings", "Настройки", 1),
+            ("history", "История", 2),
+            ("accounts", "Аккаунты", 3),
+            ("fixes", "Исправления", 4),
         ]
         if self._owner_tools_enabled:
-            nav_items.append(("⬆  GitHub", 5))
-        for label, page_idx in nav_items:
-            btn = QPushButton(label)
-            btn.setObjectName("nav_btn")
+            nav_items.append(("github", "GitHub", 5))
+        for icon_name, label, page_idx in nav_items:
+            btn = SidebarNavButton(icon_name, label)
             btn.setCheckable(False)
             btn.clicked.connect(lambda _, i=page_idx: self._switch_page(i))
             layout.addWidget(btn)
@@ -206,7 +209,7 @@ class MainWindow(QMainWindow):
         self.url_edit.returnPressed.connect(self._add_to_queue)
         top_actions.addWidget(self.url_edit, 1)
 
-        add_btn = QPushButton("Добавить")
+        add_btn = QPushButton("Скачать")
         add_btn.setMinimumHeight(38)
         add_btn.setMinimumWidth(96)
         add_btn.clicked.connect(self._add_to_queue)
@@ -252,6 +255,11 @@ class MainWindow(QMainWindow):
         self.quick_encoder_combo.addItems(["Авто GPU", "NVENC", "QSV", "AMF", "CPU"])
         self.quick_encoder_combo.currentIndexChanged.connect(self._on_quick_encoder_changed)
         smart_row.addWidget(self._mini_combo("Энкодер", self.quick_encoder_combo))
+
+        self.quick_codec_combo = QComboBox()
+        self.quick_codec_combo.addItems(["Оригинал", "H.264", "VP9", "AV1"])
+        self.quick_codec_combo.currentIndexChanged.connect(self._on_quick_codec_changed)
+        smart_row.addWidget(self._mini_combo("Кодек", self.quick_codec_combo))
 
         smart_row.addStretch()
         tool_layout.addLayout(smart_row)
@@ -309,10 +317,7 @@ class MainWindow(QMainWindow):
     def _build_settings_widget(self):
         self.settings_page = SettingsPage(self.settings)
         self.settings_page.settings_changed.connect(self._on_settings_changed)
-        scroll = QScrollArea()
-        scroll.setWidget(self.settings_page)
-        scroll.setWidgetResizable(True)
-        return scroll
+        return self.settings_page
 
     def _build_history_widget(self):
         self.history_page = HistoryPage()
@@ -415,7 +420,7 @@ class MainWindow(QMainWindow):
         text = QApplication.clipboard().text().strip()
         if text:
             self.url_edit.setText(text)
-            self._add_to_queue()
+            self.status_label.setText("Ссылка вставлена. Нажмите «Скачать», чтобы начать загрузку.")
         else:
             self.status_label.setText("Буфер обмена пуст")
 
@@ -443,6 +448,13 @@ class MainWindow(QMainWindow):
             self.quick_encoder_combo.blockSignals(True)
             self.quick_encoder_combo.setCurrentIndex(encoder_idx)
             self.quick_encoder_combo.blockSignals(False)
+        if hasattr(self, "quick_codec_combo"):
+            codec_idx = {"original": 0, "h264": 1, "vp9": 2, "av1": 3}.get(
+                normalized_target_codec(self.settings), 0
+            )
+            self.quick_codec_combo.blockSignals(True)
+            self.quick_codec_combo.setCurrentIndex(codec_idx)
+            self.quick_codec_combo.blockSignals(False)
 
     def _save_quick_setting(self, key: str, value: str):
         self.settings[key] = value
@@ -462,6 +474,15 @@ class MainWindow(QMainWindow):
 
     def _on_quick_encoder_changed(self, index: int):
         self._save_quick_setting("video_encoder", {0: "auto", 1: "h264_nvenc", 2: "h264_qsv", 3: "h264_amf", 4: "libx264"}.get(index, "auto"))
+
+    def _on_quick_codec_changed(self, index: int):
+        codec = {0: "original", 1: "h264", 2: "vp9", 3: "av1"}.get(index, "original")
+        self.settings["default_codec"] = codec
+        self.settings["auto_convert"] = codec != "original"
+        save_settings(self.settings)
+        if hasattr(self, "settings_page"):
+            self.settings_page.settings = dict(self.settings)
+            self.settings_page._load_values()
 
     def _add_to_queue(self):
         url = self.url_edit.text().strip()
@@ -513,6 +534,9 @@ class MainWindow(QMainWindow):
         worker.status.connect(self._on_status)
         worker.finished.connect(self._on_download_finished)
         worker.info_ready.connect(self._on_info_ready)
+        worker.thumbnail_ready.connect(self._on_thumbnail_ready)
+        worker.playlist_items_ready.connect(self._on_playlist_items_ready)
+        worker.playlist_item_progress.connect(self._on_playlist_item_progress)
         self._workers[item_id] = worker
         self._pending_downloads.append(item_id)
         self._start_next_downloads()
@@ -536,10 +560,17 @@ class MainWindow(QMainWindow):
             if item_id in self._pending_downloads:
                 self._pending_downloads.remove(item_id)
                 self._workers.pop(item_id, None)
+                self._item_errors[item_id] = "Отменено до запуска"
+                self.queue_widget.set_result(item_id, "", "Отменено до запуска")
+                self.queue_widget.set_finished(item_id, False)
                 self.queue_widget.update_status(item_id, "Отменено")
+                self.status_label.setText("Загрузка отменена")
                 return
             worker.cancel()
             self.queue_widget.update_status(item_id, "Отменено")
+            self.queue_widget.set_result(item_id, "", "Отменено пользователем")
+            self.queue_widget.set_finished(item_id, False)
+            self.status_label.setText("Загрузка отменена")
             logger.info(f"[{item_id}] Cancelled by user")
         self._paused_urls.pop(item_id, None)
 
@@ -631,6 +662,15 @@ class MainWindow(QMainWindow):
         self.queue_widget.update_status(item_id, f"{tag} Загрузка...")
         self.status_label.setText(f"Получены данные: {title} (Размер: {size_str})")
 
+    def _on_playlist_items_ready(self, item_id: str, entries: list):
+        self.queue_widget.set_playlist_items(item_id, entries)
+
+    def _on_thumbnail_ready(self, item_id: str, thumbnail: str):
+        self.queue_widget.set_item_thumbnail(item_id, thumbnail)
+
+    def _on_playlist_item_progress(self, item_id: str, playlist_index: int, status: str, percent: float):
+        self.queue_widget.update_playlist_item(item_id, playlist_index, status, percent)
+
     def _on_download_finished(self, item_id: str, filepath: str, success: bool, error_msg: str):
         self._workers.pop(item_id, None)
         self._active_download_ids.discard(item_id)
@@ -658,19 +698,25 @@ class MainWindow(QMainWindow):
             
             if self.settings.get("auto_convert", True) is True:
                 if filepath and os.path.isfile(filepath):
-                    self._check_and_prompt_conversion([filepath])
+                    self._check_and_prompt_conversion([filepath], is_playlist=False)
                 elif filepath and os.path.isdir(filepath):
-                    mp4_files = [
-                        os.path.join(filepath, f)
-                        for f in os.listdir(filepath)
-                        if f.lower().endswith(".mp4")
-                    ]
-                    if mp4_files:
-                        self._check_and_prompt_conversion(mp4_files)
+                    video_files = []
+                    for root, _, names in os.walk(filepath):
+                        video_files.extend(
+                            os.path.join(root, f)
+                            for f in names
+                            if f.lower().endswith((".mp4", ".mkv", ".webm"))
+                        )
+                    if video_files:
+                        self._check_and_prompt_conversion(video_files, is_playlist=True)
             else:
                 logger.info(f"Auto-convert is DISABLED by user toggle switch for [{item_id}]")
             if self.settings.get("remove_finished_from_list", False):
                 QTimer.singleShot(1200, lambda iid=item_id: self.queue_widget.remove_item(iid))
+        elif error_msg == "Отменено пользователем":
+            self.queue_widget.update_status(item_id, "Отменено")
+            self.status_label.setText("Загрузка отменена")
+            logger.info(f"[{item_id}] Cancelled")
         else:
             self.queue_widget.update_status(item_id, "Ошибка")
             self.status_label.setText(f"Ошибка: {error_msg}")
@@ -679,16 +725,53 @@ class MainWindow(QMainWindow):
                 SupportErrorDialog(self, url, filepath or "", error_msg, self.settings).exec()
         self._start_next_downloads()
 
-    def _check_and_prompt_conversion(self, filepaths: list):
+    def _check_and_prompt_conversion(self, filepaths: list, is_playlist: bool = False):
+        target_codec = normalized_target_codec(self.settings)
+        if target_codec == "original" or not self.settings.get("auto_convert", False):
+            return
+        needs_conversion = [
+            f for f in filepaths
+            if os.path.isfile(f) and has_video_stream(f) and probe_codec(f) != target_codec
+        ]
+        if not needs_conversion:
+            return
+
+        codec_label = target_codec.upper() if target_codec != "h264" else "H.264"
+        should_convert = True
+        if self.settings.get("ask_before_codec_convert", True):
+            if is_playlist:
+                msg = (
+                    f"Плейлист скачан. Найдено файлов для смены кодека: {len(needs_conversion)}.\n\n"
+                    f"Изменить кодек на {codec_label}? Оригиналы будут удалены, если в настройках не включено сохранение оригиналов."
+                )
+            elif len(needs_conversion) == 1:
+                msg = (
+                    f"Видео скачано:\n\n{os.path.basename(needs_conversion[0])}\n\n"
+                    f"Изменить кодек на {codec_label}? Оригинал будет удалён, если в настройках не включено сохранение оригиналов."
+                )
+            else:
+                names = "\n".join(f"• {os.path.basename(f)}" for f in needs_conversion[:10])
+                msg = f"Изменить кодек этих файлов на {codec_label}?\n\n{names}"
+            reply = QMessageBox.question(
+                self,
+                f"Смена кодека на {codec_label}",
+                msg,
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            should_convert = reply == QMessageBox.StandardButton.Yes
+        if should_convert:
+            for fp in needs_conversion:
+                self._start_conversion(fp)
+
+    def _legacy_check_and_prompt_conversion(self, filepaths: list):
         non_h264 = [
             f for f in filepaths
-            if os.path.isfile(f) and has_video_stream(f) and not is_h264(f)
+            if os.path.isfile(f) and has_video_stream(f) and probe_codec(f) != "h264"
         ]
         if not non_h264:
             return
-        
         if len(non_h264) == 1:
-            msg = f"Видео использует не H.264 кодек:\n\n{os.path.basename(non_h264[0])}\n\nКонвертировать сейчас на видеокарте NVIDIA (NVENC) в H.264?"
+            msg = f"Видео использует не H.264 кодек:\n\n{os.path.basename(non_h264[0])}\n\nКонвертировать сейчас в H.264?"
         else:
             names = "\n".join(f"• {os.path.basename(f)}" for f in non_h264[:10])
             if len(non_h264) > 10:
@@ -738,6 +821,6 @@ class MainWindow(QMainWindow):
         self._apply_language()
         self._update_disk_space()
         self._start_next_downloads()
-        self.status_label.setText("Настройки сохранены")
+        self.status_label.setText(translate("Настройки сохранены", self.settings.get("language", "en")))
         logger.info("Settings updated")
 
