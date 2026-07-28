@@ -2,6 +2,16 @@
 
 All notable public release changes should be documented here.
 
+## 0.1.2 - 2026-07-29
+
+- Added Spotify support through a separate spotDL-based music engine.
+- Added Spotify track, album and playlist routing as audio downloads.
+- Added Spotify account card and isolated login profile.
+- Added Spotify link preview detection without routing Spotify URLs through yt-dlp.
+- Added separate Spotify music output folders.
+- Added collapsible release groups on the in-app Fix Report page.
+- Updated installer and update asset flow for `YouTubeDownloaderSetup-0.1.2.exe`.
+
 ## 0.1.1 - 2026-07-28
 
 - Fixed missing action icons in the download queue on Windows.

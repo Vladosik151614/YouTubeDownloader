@@ -82,6 +82,8 @@ DEFAULTS = {
     "download_stats": False,
     "developer_mode": False,
     "avoid_duplicate_names": False,
+    "spotify_audio_format": "mp3",
+    "spotify_bitrate": "320k",
     "theme": "lux_graphite",
 }
 

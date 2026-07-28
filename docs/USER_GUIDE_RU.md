@@ -1,6 +1,6 @@
 # Руководство Пользователя
 
-Версия приложения: `0.1.1`
+Версия приложения: `0.1.2`
 
 ## Что Это
 
@@ -9,6 +9,7 @@ YouTube Downloader - desktop-приложение для Windows, которое
 Поддерживаемые сценарии:
 
 - YouTube: видео, плейлисты, каналы и аудио.
+- Spotify: треки, альбомы и плейлисты через музыкальный движок.
 - SoundCloud: музыка и аудио-страницы, где это поддерживается сервисом.
 - Twitch: клипы и доступные VOD.
 - TikTok: публичные видео, если сервис не ограничивает доступ с текущей сети.
@@ -16,11 +17,13 @@ YouTube Downloader - desktop-приложение для Windows, которое
 
 Вход в аккаунт не обязателен. Он нужен только для материалов, где сам сервис требует вход, возрастное подтверждение или доступ к аккаунту.
 
+Spotify поддержка берёт метаданные Spotify и скачивает совпадающее аудио из доступных источников. DRM-защищённые потоки Spotify приложение не расшифровывает.
+
 ## Установка
 
 ### Обычная Установка
 
-1. Запустите `YouTubeDownloaderSetup-0.1.1.exe`.
+1. Запустите `YouTubeDownloaderSetup-0.1.2.exe`.
 2. Выберите язык установщика.
 3. Примите пользовательское соглашение и информацию о приватности.
 4. Оставьте стандартную папку установки или выберите свою.
@@ -37,13 +40,13 @@ YouTube Downloader - desktop-приложение для Windows, которое
 Эта команда скачивает последний установщик с GitHub Release во временную папку Windows и запускает обычную установку с окном мастера:
 
 ```powershell
-irm "https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.1.exe" -OutFile "$env:TEMP\YouTubeDownloaderSetup.exe"; Start-Process "$env:TEMP\YouTubeDownloaderSetup.exe" -Wait
+irm "https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.2.exe" -OutFile "$env:TEMP\YouTubeDownloaderSetup.exe"; Start-Process "$env:TEMP\YouTubeDownloaderSetup.exe" -Wait
 ```
 
 Тихая установка без окон:
 
 ```powershell
-$url = "https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.1.exe"
+$url = "https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.2.exe"
 $installer = "$env:TEMP\YouTubeDownloaderSetup.exe"
 Invoke-WebRequest $url -OutFile $installer
 Start-Process $installer -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" -Wait
@@ -52,7 +55,7 @@ Start-Process $installer -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART
 Локальный установщик, если файл уже скачан рядом с PowerShell:
 
 ```powershell
-.\YouTubeDownloaderSetup-0.1.1.exe
+.\YouTubeDownloaderSetup-0.1.2.exe
 ```
 
 Позже можно добавить официальный `winget`-манифест. Тогда установка будет выглядеть так:
@@ -227,6 +230,7 @@ python tools\privacy_check.py
 - Twitch.
 - TikTok с учетом возможных сетевых ограничений.
 - Пауза, продолжение, отмена и повтор.
-- Установка и удаление через `YouTubeDownloaderSetup-0.1.1.exe`.
+- Установка и удаление через `YouTubeDownloaderSetup-0.1.2.exe`.
+
 
 

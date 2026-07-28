@@ -181,6 +181,14 @@ class SettingsPage(QWidget):
         self._switch(form, "ask_codec_convert_sw", "Спрашивать перед сменой кодека")
         self._switch(form, "keep_originals_sw", "Сохранять оригиналы после конвертации")
         self._switch(form, "show_all_codecs_sw", "Показывать AV1 и VP9")
+
+        music_form = self._group("Музыка Spotify", layout)
+        self.spotify_format_combo = QComboBox()
+        self.spotify_format_combo.addItems(["MP3", "M4A", "Opus", "FLAC", "WAV"])
+        music_form.addRow("Формат:", self.spotify_format_combo)
+        self.spotify_bitrate_combo = QComboBox()
+        self.spotify_bitrate_combo.addItems(["320k", "256k", "192k", "160k", "128k", "Авто"])
+        music_form.addRow("Битрейт:", self.spotify_bitrate_combo)
         layout.addStretch()
         return page
 
@@ -293,6 +301,8 @@ class SettingsPage(QWidget):
         self.container_combo.setCurrentIndex({"mp4": 0, "mkv": 1, "webm": 2}.get(self.settings.get("container", "mp4"), 0))
         self.encoding_mode_combo.setCurrentIndex({"gpu_auto": 0, "gpu_only": 1, "cpu_only": 2}.get(self.settings.get("encoding_mode", "gpu_auto"), 0))
         self.encoder_combo.setCurrentIndex({"auto": 0, "h264_nvenc": 1, "h264_qsv": 2, "h264_amf": 3, "libx264": 4}.get(self.settings.get("video_encoder", "auto"), 0))
+        self.spotify_format_combo.setCurrentIndex({"mp3": 0, "m4a": 1, "opus": 2, "flac": 3, "wav": 4}.get(self.settings.get("spotify_audio_format", "mp3"), 0))
+        self.spotify_bitrate_combo.setCurrentIndex({"320k": 0, "256k": 1, "192k": 2, "160k": 3, "128k": 4, "auto": 5}.get(self.settings.get("spotify_bitrate", "320k"), 0))
         self.concurrent_combo.setCurrentIndex(max(0, min(9, int(self.settings.get("max_concurrent_downloads", 2)) - 1)))
         self.speed_limit_combo.setCurrentIndex({"unlimited": 0, "50m": 1, "25m": 2, "10m": 3, "4m": 4, "2m": 5}.get(self.settings.get("speed_limit", "unlimited"), 0))
         self.proxy_type_combo.setCurrentIndex({"http": 0, "https": 1, "socks4": 2, "socks5": 3}.get(self.settings.get("proxy_type", "http"), 0))
@@ -425,6 +435,8 @@ class SettingsPage(QWidget):
             "language": {0: "ru", 1: "en", 2: "de", 3: "it"},
             "speed": {0: "unlimited", 1: "50m", 2: "25m", 3: "10m", 4: "4m", 5: "2m"},
             "codec": {0: "original", 1: "h264", 2: "vp9", 3: "av1"},
+            "spotify_format": {0: "mp3", 1: "m4a", 2: "opus", 3: "flac", 4: "wav"},
+            "spotify_bitrate": {0: "320k", 1: "256k", 2: "192k", 3: "160k", 4: "128k", 5: "auto"},
         }
         browser_text = self.browser_combo.currentText()
         self.settings.update({
@@ -451,6 +463,8 @@ class SettingsPage(QWidget):
             "cookies_file": self.cookies_file_edit.text(),
             "github_update_repo": self.github_repo_edit.text().strip(),
             "github_update_asset": self.github_asset_edit.text().strip() or "YouTubeDownloaderSetup",
+            "spotify_audio_format": maps["spotify_format"].get(self.spotify_format_combo.currentIndex(), "mp3"),
+            "spotify_bitrate": maps["spotify_bitrate"].get(self.spotify_bitrate_combo.currentIndex(), "320k"),
         })
         for attr, key in {
             "background_on_close_sw": "background_on_close",

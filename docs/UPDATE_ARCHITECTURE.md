@@ -1,6 +1,6 @@
 # Update Architecture
 
-Version target: `0.1.1`
+Version target: `0.1.2`
 
 ## Application Updates
 
@@ -17,7 +17,7 @@ Settings used by the updater:
 Expected GitHub release asset:
 
 ```text
-YouTubeDownloaderSetup-0.1.1.exe
+YouTubeDownloaderSetup-0.1.2.exe
 ```
 
 Runtime flow:
@@ -41,7 +41,8 @@ Support reports are sanitized locally. The issue button opens `https://github.co
 ## Release Checklist
 
 - Publish the repository.
-- Upload `YouTubeDownloaderSetup-0.1.1.exe` to GitHub Releases.
-- Test update from `0.1.1` to a higher version in a separate install folder.
+- Upload `YouTubeDownloaderSetup-0.1.2.exe` to GitHub Releases.
+- Test update from `0.1.2` to a higher version in a separate install folder.
+
 
 

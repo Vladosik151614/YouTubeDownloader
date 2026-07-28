@@ -6,6 +6,8 @@ binaries = []
 hiddenimports = ['yt_dlp', 'yt_dlp.extractor', 'yt_dlp.extractor.lazy_extractors', 'PySide6.QtCore', 'PySide6.QtWidgets', 'PySide6.QtGui']
 tmp_ret = collect_all('yt_dlp')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+tmp_ret = collect_all('spotdl')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 try:
     tmp_ret = collect_all('yt_dlp_plugins')
     datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]

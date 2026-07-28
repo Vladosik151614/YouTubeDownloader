@@ -14,7 +14,7 @@ from PySide6.QtCore import QThread, Signal
 from app.logger import logger
 from app.process_utils import hidden_subprocess_kwargs
 
-APP_VERSION = "0.1.1"
+APP_VERSION = "0.1.2"
 
 
 def _version_tuple(value: str) -> tuple[int, ...]:

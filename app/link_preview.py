@@ -40,6 +40,20 @@ class LinkPreviewWorker(QThread):
 
     def _load_preview(self) -> dict:
         service = service_for_url(self.url) or "unknown"
+        if service == "spotify":
+            kind = "Плейлист" if any(part in self.url.lower() for part in ["/playlist/", "/album/", "/artist/"]) else "Аудио"
+            return {
+                "ok": True,
+                "service": "Spotify",
+                "kind": kind,
+                "title": self.url,
+                "duration": "—",
+                "count": 0 if kind == "Плейлист" else 1,
+                "qualities": "Audio",
+                "fps": "—",
+                "subtitles": "—",
+                "size": 0,
+            }
         cookies_file = cookie_file_for_url(self.url)
         if not cookies_file and self.settings.get("auto_export_cookies", True):
             cookies_file, _ = ensure_cookie_file_for_url(self.url)
@@ -70,7 +84,7 @@ class LinkPreviewWorker(QThread):
         return {
             "ok": True,
             "service": service.title(),
-            "kind": "Плейлист" if is_playlist else ("Аудио" if service == "soundcloud" else "Видео"),
+            "kind": "Плейлист" if is_playlist else ("Аудио" if service in {"soundcloud", "spotify"} else "Видео"),
             "title": info.get("title") or self.url,
             "duration": _duration_text(info.get("duration")),
             "count": len(entries) if is_playlist else 1,

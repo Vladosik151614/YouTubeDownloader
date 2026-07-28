@@ -35,4 +35,5 @@ The installer should remove application files. Local app data should be removabl
 
 ## Analytics
 
-Download statistics are disabled by default. No analytics backend is enabled for version `0.1.1`.
+Download statistics are disabled by default. No analytics backend is enabled for version `0.1.2`.
+

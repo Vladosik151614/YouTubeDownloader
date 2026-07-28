@@ -1,5 +1,26 @@
 # Release Notes
 
+## 0.1.2
+
+Feature release for July 29, 2026.
+
+Added:
+
+- Spotify support through a separate spotDL-based music engine.
+- Spotify tracks, albums and playlists routed as audio downloads.
+- Spotify account card with isolated Chrome login profile.
+- Spotify link preview detection without sending Spotify URLs to yt-dlp.
+- Separate Spotify music folder routing.
+- Service-folder routing for YouTube, Spotify, SoundCloud, Twitch and TikTok.
+- Collapsible in-app Fix Report groups by release version.
+- GitHub release asset flow for `YouTubeDownloaderSetup-0.1.2.exe`.
+
+Notes:
+
+- Spotify support uses Spotify metadata and downloads matched audio from available providers.
+- DRM-protected Spotify audio is not decrypted.
+- Account sign-in remains optional.
+
 ## 0.1.1
 
 Bug-fix release for July 28, 2026.
@@ -35,20 +56,3 @@ Added:
 - Optional prompt before codec conversion.
 - In-app bug-fix report page with severity colors.
 - More detailed playlist diagnostics.
-- Refreshed release notes and changelog for GitHub.
-
-## 0.1.0
-
-Initial release target.
-
-Planned release contents:
-
-- Windows desktop downloader.
-- Video/audio downloads from supported services.
-- Download queue and history.
-- Optional account access through a separate app Chrome profile.
-- Download profiles and format settings.
-- H.264 conversion support.
-- Local privacy checks before publishing.
-- Installer package with privacy/user agreement.
-- Default installation path: `C:\Program Files\YouTube Downloader`.

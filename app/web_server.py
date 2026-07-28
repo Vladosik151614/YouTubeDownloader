@@ -19,11 +19,10 @@ from app.logger import logger
 from app.path_manager import service_output_folder
 from app.proxy_config import proxy_url_from_settings
 from app.settings_manager import APP_DATA_DIR, load_settings
-
+from app.spotify_engine import is_spotify_url, run_spotify_download_callbacks
 
 TASKS = {}
 TASKS_LOCK = threading.Lock()
-
 
 HTML = r"""<!doctype html>
 <html lang="ru">
@@ -135,11 +134,9 @@ HTML = r"""<!doctype html>
 </body>
 </html>"""
 
-
 def _task_update(task_id: str, **changes):
     with TASKS_LOCK:
         TASKS.setdefault(task_id, {}).update(changes)
-
 
 def _snapshot_files(folder: str) -> set[str]:
     try:
@@ -151,14 +148,12 @@ def _snapshot_files(folder: str) -> set[str]:
     except Exception:
         return set()
 
-
 def _media_files(paths: set[str]) -> list[str]:
     exts = {".mp4", ".mkv", ".webm", ".m4a", ".mp3", ".opus", ".jpg", ".jpeg", ".png", ".webp", ".json", ".description", ".vtt", ".srt"}
     return sorted(
         path for path in paths
         if os.path.splitext(path)[1].lower() in exts and os.path.getsize(path) > 0
     )
-
 
 def _rate_limit_bytes(value: str) -> int | None:
     limits = {
@@ -305,6 +300,16 @@ def _download_task(task_id: str):
     if settings.get("auto_route_folders", True):
         folder = service_output_folder(folder, url, settings.get("download_type", "video"))
     os.makedirs(folder, exist_ok=True)
+    if is_spotify_url(url):
+        files, error = run_spotify_download_callbacks(task_id, url, folder, settings, lambda tid, text: _task_update(tid, status=text), lambda tid, pct, *_: _task_update(tid, percent=pct))
+        if error:
+            add_history_entry(url, TASKS[task_id].get("title", url), "", False, error)
+            _task_update(task_id, status="Ошибка", error=error)
+            return
+        first_path = files[0] if files else folder
+        add_history_entry(url, TASKS[task_id].get("title", url), first_path, True, "")
+        _task_update(task_id, status="Завершено", percent=100.0, error="", files=files)
+        return
 
     for attempt in range(2):
         collector = YtDlpLogCollector(task_id)

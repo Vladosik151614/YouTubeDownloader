@@ -14,6 +14,7 @@ SERVICE_FOLDER = {
     "soundcloud": "SoundCloud",
     "twitch": "Twitch",
     "tiktok": "TikTok",
+    "spotify": "Spotify",
 }
 
 
@@ -29,7 +30,7 @@ def default_download_root() -> str:
 def service_output_folder(base_folder: str, url: str, download_type: str = "video") -> str:
     service = service_for_url(url)
     service_dir = SERVICE_FOLDER.get(service, "Other")
-    if download_type == "audio" or service == "soundcloud":
+    if download_type == "audio" or service in {"soundcloud", "spotify"}:
         media_dir = "Music"
     elif download_type == "pictures":
         media_dir = "Pictures"

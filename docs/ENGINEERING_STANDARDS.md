@@ -4,7 +4,7 @@ These rules are the local refactoring guardrails for the project. They are meant
 
 ## Version
 
-- Public app version is `0.1.1` for the current release track.
+- Public app version is `0.1.2` for the current release track.
 - Version text must be changed in one intentional versioning pass, not during unrelated UI fixes.
 
 ## File Size Limits
@@ -42,3 +42,4 @@ These rules are the local refactoring guardrails for the project. They are meant
 - Every conversion change needs CPU x264 smoke test.
 - GPU encoder changes should test the selected GPU encoder when available.
 - UI changes must be checked at the minimum window size.
+

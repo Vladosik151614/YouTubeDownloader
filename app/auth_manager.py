@@ -25,6 +25,7 @@ SERVICE_HOSTS = {
     "tiktok": ("tiktok.com",),
     "twitch": ("twitch.tv",),
     "soundcloud": ("soundcloud.com",),
+    "spotify": ("spotify.com", "open.spotify.com"),
 }
 
 LOGIN_URLS = {
@@ -32,6 +33,7 @@ LOGIN_URLS = {
     "tiktok": "https://www.tiktok.com/login",
     "twitch": "https://www.twitch.tv/login",
     "soundcloud": "https://soundcloud.com/signin",
+    "spotify": "https://open.spotify.com",
 }
 
 

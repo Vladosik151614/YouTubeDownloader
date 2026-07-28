@@ -7,14 +7,14 @@
 
 A Windows desktop downloader for video, music, playlists, channels and clips from supported public services.
 
-Version target: `0.1.1`
+Version target: `0.1.2`
 
 ![Download screen](docs/assets/screenshots/01-download-annotated.png)
 
 ## Features
 
 - Download video and audio from supported services.
-- Save YouTube, SoundCloud, Twitch and TikTok content where supported by the download system.
+- Save YouTube, Spotify, SoundCloud, Twitch and TikTok content where supported by the download system.
 - Choose quality, FPS, container and H.264 conversion profile.
 - Use a separate app Chrome profile for restricted content when sign-in is required.
 - Keep public downloads working without account sign-in.
@@ -26,6 +26,7 @@ Version target: `0.1.1`
 - Background tray mode, exit confirmation and completion notifications.
 - Sanitized support reports that avoid cookies, tokens and local user paths.
 - Local settings and history stored outside the source folder.
+- Separate service folders for Spotify, SoundCloud, YouTube, Twitch and TikTok.
 
 ## Documentation
 
@@ -57,18 +58,18 @@ Version target: `0.1.1`
 
 ## Install From Command Line
 
-Version 0.1.1 is published as a Windows installer.
+Version 0.1.2 is published as a Windows installer.
 
 Normal install command:
 
 ```powershell
-irm "https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.1.exe" -OutFile "$env:TEMP\YouTubeDownloaderSetup.exe"; Start-Process "$env:TEMP\YouTubeDownloaderSetup.exe" -Wait
+irm "https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.2.exe" -OutFile "$env:TEMP\YouTubeDownloaderSetup.exe"; Start-Process "$env:TEMP\YouTubeDownloaderSetup.exe" -Wait
 ```
 
 Silent install command:
 
 ```powershell
-$url = "https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.1.exe"
+$url = "https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.2.exe"
 $installer = "$env:TEMP\YouTubeDownloaderSetup.exe"
 Invoke-WebRequest $url -OutFile $installer
 Start-Process $installer -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" -Wait
@@ -82,6 +83,8 @@ For restricted content, open `Accounts`, choose the service and sign in once in 
 
 The app does not use your normal Chrome profile by default.
 
+Spotify support uses a separate music engine. Spotify tracks, albums and playlists are resolved through Spotify metadata and downloaded from available audio providers; DRM-protected Spotify audio is not decrypted.
+
 ## Privacy
 
 The app stores settings, logs, history and access data locally on your computer. It must not include cookies, logs, settings, build folders or personal paths in the GitHub repository.
@@ -93,4 +96,5 @@ Read [PRIVACY.md](PRIVACY.md) before publishing a release.
 For release builds, the app provides a sanitized error report that can be copied or opened as a GitHub issue. Reports must not include cookies, passwords or private tokens.
 
 ## Maintainer Tools
+
 

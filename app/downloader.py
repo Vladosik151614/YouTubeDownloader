@@ -21,19 +21,10 @@ from app.download_utils import (
 from app.path_manager import service_output_folder
 from app.proxy_config import proxy_url_from_settings
 from app.settings_manager import APP_DATA_DIR
+from app.spotify_engine import is_spotify_url, run_spotify_download
 
 
 class DownloadWorker(QThread):
-    """
-    Сигналы:
-        progress(item_id, percent, speed, eta)
-        status(item_id, text)
-        finished(item_id, filepath, success, error_msg)
-        info_ready(item_id, title, is_playlist, entries_count, estimated_size_str)
-        thumbnail_ready(item_id, thumbnail_url)
-        playlist_items_ready(item_id, entries)
-        playlist_item_progress(item_id, playlist_index, status, percent)
-    """
     progress = Signal(str, float, str, str)
     status = Signal(str, str)
     finished = Signal(str, str, bool, str)
@@ -51,9 +42,12 @@ class DownloadWorker(QThread):
         self._cancelled = False
         self._ydl_logger = YtDlpLogCollector(item_id)
         self._auth_retry_used = False
+        self._spotify_process = None
 
     def cancel(self):
         self._cancelled = True
+        if self._spotify_process and self._spotify_process.poll() is None:
+            self._spotify_process.terminate()
 
     def run(self):
         try:
@@ -70,7 +64,6 @@ class DownloadWorker(QThread):
     def _progress_hook(self, d):
         if self._cancelled:
             raise yt_dlp.utils.DownloadCancelled("Отменено пользователем")
-        
         status = d.get("status", "")
         info = d.get("info_dict") or {}
         playlist_index = info.get("playlist_index")
@@ -98,7 +91,6 @@ class DownloadWorker(QThread):
         if self.settings.get("auto_route_folders", True):
             self.output_folder = service_output_folder(self.output_folder, self.url, download_type)
             os.makedirs(self.output_folder, exist_ok=True)
-
         if download_type == "audio":
             fmt = "bestaudio/best"
         elif download_type in {"pictures", "documents"}:
@@ -120,13 +112,11 @@ class DownloadWorker(QThread):
                     f"bestvideo{media_filter}+bestaudio/"
                     "best[ext=mp4]/best"
                 )
-        
         if is_playlist(self.url) and self.settings.get("playlist_subfolders", True):
             filename = "%(playlist_index)03d - %(title)s.%(ext)s" if self.settings.get("playlist_numbering", True) else "%(title)s.%(ext)s"
             outtmpl = os.path.join(self.output_folder, "%(playlist_title)s", filename)
         else:
             outtmpl = os.path.join(self.output_folder, "%(title)s.%(ext)s")
-        
         opts = {
             "format": fmt,
             "outtmpl": outtmpl,
@@ -135,8 +125,8 @@ class DownloadWorker(QThread):
             "merge_output_format": container,
             "skip_download": download_type in {"pictures", "documents"},
             "noplaylist": False,
-            "ignoreerrors": True,               # Пропускать ошибки отдельного видео в плейлисте
-            "skip_unavailable_fragments": True, # Пропускать поврежденные фрагменты
+            "ignoreerrors": True,
+            "skip_unavailable_fragments": True,
             "fragment_retries": 10,
             "retries": 5,
             "extractor_retries": 3,
@@ -177,7 +167,6 @@ class DownloadWorker(QThread):
 
         if os.path.isfile(deno_bin):
             opts["js_runtimes"] = {"deno": {"path": deno_bin}}
-        
         # Cookies
         cookies_file = cookie_file_for_url(self.url)
         if not cookies_file and self.settings.get("auto_export_cookies", True):
@@ -196,11 +185,6 @@ class DownloadWorker(QThread):
         return opts
 
     def _playlist_preflight_info(self, opts: dict) -> tuple[dict, bool]:
-        """
-        Read playlist metadata quickly without resolving every video format first.
-        Large YouTube playlists can otherwise sit on "Получение информации..."
-        for a very long time before the first file starts downloading.
-        """
         if not is_playlist(self.url):
             return {}, False
         flat_opts = dict(opts)
@@ -332,6 +316,9 @@ class DownloadWorker(QThread):
         return base + ".mp4"
 
     def _download(self):
+        if is_spotify_url(self.url):
+            self._download_spotify()
+            return
         self.status.emit(self.item_id, "Получение информации...")
         opts = self._build_ydl_opts()
         
@@ -438,3 +425,24 @@ class DownloadWorker(QThread):
             logger.info(f"[{self.item_id}] Download process finished: {filepath}")
             self.status.emit(self.item_id, "Завершено")
             self.finished.emit(self.item_id, filepath, True, "")
+
+    def _download_spotify(self):
+        download_type = "audio"
+        if self.settings.get("auto_route_folders", True):
+            self.output_folder = service_output_folder(self.output_folder, self.url, download_type)
+        os.makedirs(self.output_folder, exist_ok=True)
+        logger.info(f"[{self.item_id}] Spotify download started: folder={self.output_folder}")
+        self.info_ready.emit(self.item_id, "Spotify music", True, 0, "—")
+        files, error = run_spotify_download(self, self.url, self.output_folder, self.settings)
+        if error:
+            cancelled = "Отменено" in error
+            self.status.emit(self.item_id, "Отменено" if cancelled else "Ошибка")
+            self.finished.emit(self.item_id, "", False, "Отменено пользователем" if cancelled else self._friendly_error(error))
+            return
+        if not files:
+            self.finished.emit(self.item_id, "", False, "Spotify загрузка закончилась без готовых аудиофайлов.")
+            return
+        logger.info(f"[{self.item_id}] Spotify download finished: files={len(files)}")
+        self.progress.emit(self.item_id, 100.0, "—", "—")
+        self.status.emit(self.item_id, "Завершено")
+        self.finished.emit(self.item_id, files[0] if len(files) == 1 else self.output_folder, True, "")

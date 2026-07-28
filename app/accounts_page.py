@@ -31,6 +31,7 @@ SERVICE_LABELS = {
     "tiktok": "TikTok",
     "twitch": "Twitch",
     "soundcloud": "SoundCloud",
+    "spotify": "Spotify",
 }
 
 SERVICE_ICONS = {
@@ -38,6 +39,7 @@ SERVICE_ICONS = {
     "tiktok": "app/assets/service_icons/tiktok.png",
     "twitch": "app/assets/service_icons/twitch.png",
     "soundcloud": "app/assets/service_icons/soundcloud.png",
+    "spotify": "app/assets/service_icons/spotify.png",
 }
 
 
