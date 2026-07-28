@@ -120,7 +120,7 @@ class AppUpdateWorker(QThread):
         }
 
     def _find_asset(self, release: dict) -> dict | None:
-        pattern = str(self.settings.get("github_update_asset", "YouTubeDownloader")).lower()
+        pattern = str(self.settings.get("github_update_asset", "YouTubeDownloaderSetup")).lower()
         assets = release.get("assets") or []
         for asset in assets:
             name = str(asset.get("name", ""))
@@ -130,9 +130,9 @@ class AppUpdateWorker(QThread):
 
     def _download_asset(self, info: dict) -> None:
         asset_url = info.get("asset_url", "")
-        asset_name = info.get("asset_name", "") or "YouTubeDownloader.exe"
+        asset_name = info.get("asset_name", "") or "YouTubeDownloaderSetup.exe"
         if not asset_url:
-            self.downloaded.emit(False, "В релизе не найден файл приложения.")
+            self.downloaded.emit(False, "В релизе не найден установщик приложения.")
             return
         safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "_", asset_name)
         target = os.path.join(tempfile.gettempdir(), safe_name)

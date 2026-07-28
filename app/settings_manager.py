@@ -45,7 +45,7 @@ DEFAULTS = {
     "auto_download_updates": True,
     "install_beta_updates": False,
     "github_update_repo": "Vladosik151614/YouTubeDownloader",
-    "github_update_asset": "YouTubeDownloader",
+    "github_update_asset": "YouTubeDownloaderSetup",
     "background_on_close": False,
     "launch_on_startup": False,
     "language": "en",

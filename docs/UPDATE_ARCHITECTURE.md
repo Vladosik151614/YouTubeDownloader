@@ -9,15 +9,15 @@ The application update flow uses GitHub Releases from `Vladosik151614/YouTubeDow
 Settings used by the updater:
 
 - `github_update_repo`: repository in `owner/repo` format.
-- `github_update_asset`: release asset name fragment, default `YouTubeDownloader`.
+- `github_update_asset`: release asset name fragment, default `YouTubeDownloaderSetup`.
 - `auto_update_app`: checks for app updates on startup.
-- `auto_download_updates`: downloads the release asset after user confirmation.
+- `auto_download_updates`: downloads the installer after user confirmation.
 - `install_beta_updates`: allows prerelease releases.
 
 Expected GitHub release asset:
 
 ```text
-YouTubeDownloader-0.1.1-portable.exe
+YouTubeDownloaderSetup-0.1.1.exe
 ```
 
 Runtime flow:
@@ -25,8 +25,8 @@ Runtime flow:
 1. App starts.
 2. If `auto_update_app` is enabled and `github_update_repo` is configured, the app reads GitHub Releases.
 3. If the latest release version is newer than the local app version, the user is prompted.
-4. If the user accepts and automatic downloads are enabled, the release asset is downloaded to the Windows temp folder.
-5. The app asks for confirmation, launches the downloaded build and exits.
+4. If the user accepts and automatic downloads are enabled, the installer is downloaded to the Windows temp folder.
+5. The app asks for confirmation, launches the installer and exits.
 
 If `github_update_repo` is empty in a local developer build, the updater is inactive and does not contact GitHub.
 
@@ -41,7 +41,7 @@ Support reports are sanitized locally. The issue button opens `https://github.co
 ## Release Checklist
 
 - Publish the repository.
-- Upload `YouTubeDownloader-0.1.1-portable.exe` to GitHub Releases.
+- Upload `YouTubeDownloaderSetup-0.1.1.exe` to GitHub Releases.
 - Test update from `0.1.1` to a higher version in a separate install folder.
 
 

@@ -7,7 +7,7 @@
 #define MyAppExeName "YouTubeDownloader.exe"
 
 [Setup]
-AppId={{7F781982-81D9-42D4-8B41-YTDL00000100}
+AppId={{7F781982-81D9-42D4-8B41-000000000100}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}

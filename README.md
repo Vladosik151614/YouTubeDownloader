@@ -57,21 +57,21 @@ Version target: `0.1.1`
 
 ## Install From Command Line
 
-Version 0.1.1 is published as a portable Windows executable.
+Version 0.1.1 is published as a Windows installer.
 
 Normal install command:
 
 ```powershell
-irm "https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloader-0.1.1-portable.exe" -OutFile "$env:TEMP\YouTubeDownloader.exe"; Start-Process "$env:TEMP\YouTubeDownloader.exe"
+irm "https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.1.exe" -OutFile "$env:TEMP\YouTubeDownloaderSetup.exe"; Start-Process "$env:TEMP\YouTubeDownloaderSetup.exe" -Wait
 ```
 
 Silent install command:
 
 ```powershell
-$url = "https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloader-0.1.1-portable.exe"
-$app = "$env:TEMP\YouTubeDownloader.exe"
-Invoke-WebRequest $url -OutFile $app
-Start-Process $app
+$url = "https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.1.exe"
+$installer = "$env:TEMP\YouTubeDownloaderSetup.exe"
+Invoke-WebRequest $url -OutFile $installer
+Start-Process $installer -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" -Wait
 ```
 
 ## Account Access

@@ -87,7 +87,7 @@ def build_developer_tab(owner) -> QWidget:
     owner.github_repo_edit.setPlaceholderText("owner/repository")
     form.addRow("GitHub Releases:", owner.github_repo_edit)
     owner.github_asset_edit = QLineEdit()
-    owner.github_asset_edit.setPlaceholderText("YouTubeDownloader")
+    owner.github_asset_edit.setPlaceholderText("YouTubeDownloaderSetup")
     form.addRow("Файл релиза:", owner.github_asset_edit)
     update_group = QGroupBox("Система загрузки")
     row = QHBoxLayout(update_group)
