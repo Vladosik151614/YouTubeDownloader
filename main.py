@@ -4,6 +4,7 @@ YouTube Downloader — точка входа
 import sys
 import os
 import ctypes
+import traceback
 
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import Qt
@@ -33,8 +34,17 @@ from app.main_window import MainWindow
 def main():
     if "--spotdl-child" in sys.argv:
         sys.argv.remove("--spotdl-child")
-        from spotdl.console.entry_point import console_entry_point
-        console_entry_point()
+        try:
+            from spotdl.console.entry_point import console_entry_point
+            console_entry_point()
+        except SystemExit:
+            raise
+        except Exception:
+            log_dir = os.path.join(os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "YouTubeDownloader", "logs")
+            os.makedirs(log_dir, exist_ok=True)
+            with open(os.path.join(log_dir, "spotdl_child_error.log"), "w", encoding="utf-8") as file:
+                file.write(traceback.format_exc())
+            sys.exit(1)
         return
 
     if "--browser" in sys.argv or "--web" in sys.argv:
