@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.history_store import clear_history, load_history
+from app.icon_button import ActionIconButton
 from app.logger import logger
 
 
@@ -101,15 +102,11 @@ class HistoryPage(QWidget):
         layout.setContentsMargins(4, 2, 4, 2)
         layout.setSpacing(4)
 
-        open_btn = QPushButton("📂")
-        open_btn.setFixedSize(30, 24)
-        open_btn.setToolTip("Открыть папку")
+        open_btn = ActionIconButton("folder", "Открыть папку")
         open_btn.clicked.connect(lambda _, path=record.get("path", ""): self._open_path(path))
         layout.addWidget(open_btn)
 
-        details_btn = QPushButton("!")
-        details_btn.setFixedSize(28, 24)
-        details_btn.setToolTip("Показать детали")
+        details_btn = ActionIconButton("details", "Показать детали")
         details_btn.clicked.connect(lambda _, rec=record: self._show_details(rec))
         layout.addWidget(details_btn)
         layout.addStretch()

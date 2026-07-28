@@ -265,6 +265,19 @@ QLabel#subtle {{
     color: {p["muted"]};
     font-size: 12px;
 }}
+QPushButton#action_icon_btn {{
+    background: {p["control"]};
+    border: 1px solid {p["border"]};
+    border-radius: 7px;
+    padding: 0px;
+}}
+QPushButton#action_icon_btn:hover {{
+    background: {p["control_hover"]};
+    border-color: {p["accent"]};
+}}
+QPushButton#action_icon_btn:pressed {{
+    background: {p["control_pressed"]};
+}}
 """
     return qss
 

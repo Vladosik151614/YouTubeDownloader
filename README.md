@@ -7,7 +7,7 @@
 
 A Windows desktop downloader for video, music, playlists, channels and clips from supported public services.
 
-Version target: `0.1.0`
+Version target: `0.1.1`
 
 ![Download screen](docs/assets/screenshots/01-download-annotated.png)
 
@@ -19,6 +19,7 @@ Version target: `0.1.0`
 - Use a separate app Chrome profile for restricted content when sign-in is required.
 - Keep public downloads working without account sign-in.
 - Download history, retry, open folder and queue controls.
+- Built-in bug-fix report with dated release notes.
 - Pause and continue downloads using the same partial files where the service supports resume.
 - Local browser interface for development checks: `python main.py --web`.
 - Structured proxy settings and a lightweight speed check for concurrency recommendations.
@@ -61,13 +62,13 @@ The installer places the app in `C:\Program Files\YouTube Downloader` by default
 Normal install command:
 
 ```powershell
-irm "https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.0.exe" -OutFile "$env:TEMP\YouTubeDownloaderSetup.exe"; Start-Process "$env:TEMP\YouTubeDownloaderSetup.exe" -Wait
+irm "https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.1.exe" -OutFile "$env:TEMP\YouTubeDownloaderSetup.exe"; Start-Process "$env:TEMP\YouTubeDownloaderSetup.exe" -Wait
 ```
 
 Silent install command:
 
 ```powershell
-$url = "https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.0.exe"
+$url = "https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.1.exe"
 $installer = "$env:TEMP\YouTubeDownloaderSetup.exe"
 Invoke-WebRequest $url -OutFile $installer
 Start-Process $installer -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" -Wait

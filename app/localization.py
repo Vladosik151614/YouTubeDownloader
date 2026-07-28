@@ -12,6 +12,8 @@ TRANSLATIONS = {
         "Настройки": "Settings",
         "История": "History",
         "Аккаунты": "Accounts",
+        "Исправления": "Fixes",
+        "Отчёт исправлений": "Bug Fix Report",
         "Загрузка видео, музыки и плейлистов": "Video, Music And Playlist Downloads",
         "Поддержка видео, музыки, плейлистов, каналов и клипов": "Video, music, playlists, channels and clips",
         "Вставить ссылку": "Paste Link",
@@ -84,6 +86,7 @@ TRANSLATIONS = {
         "Готово": "Done",
         "Активно, данные доступа:": "Active, access data:",
         "Не подключено": "Not Connected",
+        "Версия 0.1.1 · дата фикса: 2026-07-28": "Version 0.1.1 · fix date: 2026-07-28",
     },
     "de": {
         "Готов к загрузке": "Bereit",
@@ -91,6 +94,8 @@ TRANSLATIONS = {
         "Настройки": "Einstellungen",
         "История": "Verlauf",
         "Аккаунты": "Konten",
+        "Исправления": "Fixes",
+        "Отчёт исправлений": "Fehlerbehebungen",
         "Загрузка видео, музыки и плейлистов": "Videos, Musik und Playlists herunterladen",
         "Вставить ссылку": "Link einfugen",
         "Добавить": "Hinzufugen",
@@ -135,6 +140,7 @@ TRANSLATIONS = {
         "Завершено": "Fertig",
         "Отменено": "Abgebrochen",
         "Ошибка": "Fehler",
+        "Версия 0.1.1 · дата фикса: 2026-07-28": "Version 0.1.1 · Fix-Datum: 2026-07-28",
     },
     "it": {
         "Готов к загрузке": "Pronto",
@@ -142,6 +148,8 @@ TRANSLATIONS = {
         "Настройки": "Impostazioni",
         "История": "Cronologia",
         "Аккаунты": "Account",
+        "Исправления": "Correzioni",
+        "Отчёт исправлений": "Report correzioni",
         "Загрузка видео, музыки и плейлистов": "Download di video, musica e playlist",
         "Вставить ссылку": "Incolla link",
         "Добавить": "Aggiungi",
@@ -186,6 +194,7 @@ TRANSLATIONS = {
         "Завершено": "Completato",
         "Отменено": "Annullato",
         "Ошибка": "Errore",
+        "Версия 0.1.1 · дата фикса: 2026-07-28": "Versione 0.1.1 · data correzione: 2026-07-28",
     },
 }
 

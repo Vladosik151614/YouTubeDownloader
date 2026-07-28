@@ -35,6 +35,7 @@ from app.tray_controller import TrayController
 from app.localization import apply_translations
 from app.owner_tools import OwnerToolsPage, owner_tools_available
 from app.process_utils import hidden_subprocess_kwargs
+from app.fix_report_page import APP_VERSION, FixReportPage
 
 from app.theme import app_qss
 
@@ -91,8 +92,9 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self._build_settings_widget()) # page 1
         self.stack.addWidget(self._build_history_widget())  # page 2
         self.stack.addWidget(self._build_accounts_widget()) # page 3
+        self.stack.addWidget(self._build_fix_report_widget()) # page 4
         if self._owner_tools_enabled:
-            self.stack.addWidget(self._build_owner_tools_widget()) # page 4
+            self.stack.addWidget(self._build_owner_tools_widget()) # page 5
 
         root_layout.addWidget(self._build_sidebar())
         root_layout.addWidget(self.stack, 1)
@@ -101,7 +103,7 @@ class MainWindow(QMainWindow):
         self.status_label = QLabel("Готов к загрузке")
         self.disk_space_label = QLabel("💾 Диск: —")
         self.disk_space_label.setStyleSheet("font-weight: bold;")
-        self.version_label = QLabel("v0.1.0")
+        self.version_label = QLabel(f"v{APP_VERSION}")
         self.version_label.setStyleSheet("color: #777;")
         
         self.statusBar().addWidget(self.status_label, 1)
@@ -131,9 +133,10 @@ class MainWindow(QMainWindow):
             ("⚙  Настройки", 1),
             ("◷  История", 2),
             ("◉  Аккаунты", 3),
+            ("◆  Исправления", 4),
         ]
         if self._owner_tools_enabled:
-            nav_items.append(("⬆  GitHub", 4))
+            nav_items.append(("⬆  GitHub", 5))
         for label, page_idx in nav_items:
             btn = QPushButton(label)
             btn.setObjectName("nav_btn")
@@ -318,6 +321,10 @@ class MainWindow(QMainWindow):
     def _build_accounts_widget(self):
         self.accounts_page = AccountsPage()
         return self.accounts_page
+
+    def _build_fix_report_widget(self):
+        self.fix_report_page = FixReportPage()
+        return self.fix_report_page
 
     def _build_owner_tools_widget(self):
         self.owner_tools_page = OwnerToolsPage()

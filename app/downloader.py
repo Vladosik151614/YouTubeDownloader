@@ -4,75 +4,21 @@ downloader.py — загрузка видео/плейлистов через yt
 """
 import os
 import re
-import ctypes
 import yt_dlp
 from PySide6.QtCore import QThread, Signal
 from app.logger import logger
 from app.binary_manager import get_binary_path
 from app.auth_manager import cookie_file_for_url, ensure_cookie_file_for_url, refresh_cookie_file_for_url
+from app.download_utils import (
+    YtDlpLogCollector,
+    format_bytes,
+    is_playlist,
+    rate_limit_bytes,
+    set_sleep_prevention,
+)
 from app.path_manager import service_output_folder
 from app.proxy_config import proxy_url_from_settings
 from app.settings_manager import APP_DATA_DIR
-
-
-def format_bytes(size: int) -> str:
-    if not size or size <= 0:
-        return "—"
-    for unit in ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ']:
-        if abs(size) < 1024.0:
-            return f"{size:.1f} {unit}"
-        size /= 1024.0
-    return f"{size:.1f} ПБ"
-
-
-def is_playlist(url: str) -> bool:
-    playlist_patterns = [
-        r"list=",
-        r"/playlist\?",
-        r"youtube\.com/playlist",
-    ]
-    return any(re.search(p, url) for p in playlist_patterns)
-
-
-def _rate_limit_bytes(value: str) -> int | None:
-    limits = {
-        "50m": 50 * 1024 * 1024 // 8,
-        "25m": 25 * 1024 * 1024 // 8,
-        "10m": 10 * 1024 * 1024 // 8,
-        "4m": 4 * 1024 * 1024 // 8,
-        "2m": 2 * 1024 * 1024 // 8,
-    }
-    return limits.get(value)
-
-
-def _set_sleep_prevention(enabled: bool) -> None:
-    if os.name != "nt":
-        return
-    try:
-        flags = 0x80000000 | 0x00000001 | 0x00000002 if enabled else 0x80000000
-        ctypes.windll.kernel32.SetThreadExecutionState(flags)
-    except Exception:
-        pass
-
-class YtDlpLogCollector:
-    def __init__(self, item_id: str):
-        self.item_id = item_id
-        self.messages = []
-        self.errors = []
-
-    def debug(self, msg):
-        if msg.startswith("[debug]"):
-            logger.debug(f"[{self.item_id}] yt-dlp {msg}")
-
-    def warning(self, msg):
-        self.messages.append(str(msg))
-        logger.warning(f"[{self.item_id}] yt-dlp warning: {msg}")
-
-    def error(self, msg):
-        msg = str(msg)
-        self.messages.append(msg)
-        self.errors.append(msg)
-        logger.error(f"[{self.item_id}] yt-dlp error: {msg}")
 
 
 class DownloadWorker(QThread):
@@ -104,14 +50,14 @@ class DownloadWorker(QThread):
     def run(self):
         try:
             if self.settings.get("prevent_sleep", True):
-                _set_sleep_prevention(True)
+                set_sleep_prevention(True)
             self._download()
         except Exception as e:
             logger.error(f"[{self.item_id}] Download worker exception: {e}")
             self.finished.emit(self.item_id, "", False, str(e))
         finally:
             if self.settings.get("prevent_sleep", True):
-                _set_sleep_prevention(False)
+                set_sleep_prevention(False)
 
     def _progress_hook(self, d):
         if self._cancelled:
@@ -180,6 +126,7 @@ class DownloadWorker(QThread):
             "fragment_retries": 10,
             "retries": 5,
             "extractor_retries": 3,
+            "socket_timeout": 20,
             "continuedl": True,
             "writeinfojson": False,
             "quiet": True,
@@ -194,7 +141,7 @@ class DownloadWorker(QThread):
         elif download_type == "documents":
             opts.update({"writedescription": True, "writeinfojson": True, "writesubtitles": True})
 
-        rate_limit = _rate_limit_bytes(self.settings.get("speed_limit", "unlimited"))
+        rate_limit = rate_limit_bytes(self.settings.get("speed_limit", "unlimited"))
         if rate_limit:
             opts["ratelimit"] = rate_limit
 
@@ -233,6 +180,34 @@ class DownloadWorker(QThread):
             opts["cookiesfrombrowser"] = (cookies_browser, None, None, None)
         
         return opts
+
+    def _playlist_preflight_info(self, opts: dict) -> tuple[dict, bool]:
+        """
+        Read playlist metadata quickly without resolving every video format first.
+        Large YouTube playlists can otherwise sit on "Получение информации..."
+        for a very long time before the first file starts downloading.
+        """
+        if not is_playlist(self.url):
+            return {}, False
+        flat_opts = dict(opts)
+        flat_opts.update({
+            "extract_flat": "in_playlist",
+            "skip_download": True,
+            "playlist_items": None,
+            "progress_hooks": [],
+        })
+        self.status.emit(self.item_id, "Чтение списка плейлиста...")
+        logger.info(f"[{self.item_id}] Fast playlist preflight started")
+        with yt_dlp.YoutubeDL(flat_opts) as ydl:
+            info = ydl.extract_info(self.url, download=False)
+        if not info:
+            return {}, False
+        entries = [entry for entry in (info.get("entries") or []) if entry]
+        logger.info(
+            f"[{self.item_id}] Fast playlist preflight done: "
+            f"title={info.get('title', 'Без названия')}, entries={len(entries)}"
+        )
+        return info, True
 
     def _write_m3u(self, files: list[str], playlist_title: str):
         if not files:
@@ -310,11 +285,13 @@ class DownloadWorker(QThread):
 
     def _snapshot_output_files(self) -> set[str]:
         try:
-            return {
-                os.path.join(self.output_folder, name)
-                for name in os.listdir(self.output_folder)
-                if os.path.isfile(os.path.join(self.output_folder, name))
-            }
+            files = set()
+            for root, _, names in os.walk(self.output_folder):
+                for name in names:
+                    path = os.path.join(root, name)
+                    if os.path.isfile(path):
+                        files.add(path)
+            return files
         except Exception:
             return set()
 
@@ -345,8 +322,20 @@ class DownloadWorker(QThread):
         opts = self._build_ydl_opts()
         
         with yt_dlp.YoutubeDL(opts) as ydl:
+            logger.info(
+                f"[{self.item_id}] Download options: folder={self.output_folder}, "
+                f"type={self.settings.get('download_type')}, quality={self.settings.get('download_quality')}, "
+                f"fps={self.settings.get('fps_limit')}, container={self.settings.get('container')}, "
+                f"playlist_subfolders={self.settings.get('playlist_subfolders')}, "
+                f"skip_duplicates={self.settings.get('skip_duplicates')}"
+            )
             try:
-                info = ydl.extract_info(self.url, download=False)
+                if is_playlist(self.url):
+                    info, fast_playlist = self._playlist_preflight_info(opts)
+                else:
+                    self.status.emit(self.item_id, "Получение информации...")
+                    info = ydl.extract_info(self.url, download=False)
+                    fast_playlist = False
             except Exception as e:
                 if self._refresh_cookies_and_retry(str(e)):
                     self._download()
@@ -369,7 +358,7 @@ class DownloadWorker(QThread):
                 raise RuntimeError(self._friendly_error("Плейлист найден, но доступных видео в нём нет"))
 
             total_size = 0
-            if pl:
+            if pl and not fast_playlist:
                 for entry in entries:
                     if entry:
                         total_size += entry.get("filesize") or entry.get("filesize_approx") or 0
@@ -398,6 +387,10 @@ class DownloadWorker(QThread):
 
             if self._ydl_logger.errors:
                 download_error = self._ydl_logger.errors[-1]
+            logger.info(
+                f"[{self.item_id}] yt-dlp finished with warnings={len(self._ydl_logger.messages)} "
+                f"errors={len(self._ydl_logger.errors)} last_error={download_error or 'none'}"
+            )
             
             if pl:
                 new_files = self._new_media_files(files_before)
@@ -406,6 +399,11 @@ class DownloadWorker(QThread):
                         self._download()
                         return
                     raise RuntimeError(self._friendly_error(f"Не удалось загрузить плейлист: {download_error}"))
+                if download_error and new_files:
+                    logger.warning(
+                        f"[{self.item_id}] Playlist completed with skipped/problem items. "
+                        f"Saved files: {len(new_files)}. Last issue: {download_error}"
+                    )
                 if self.settings.get("create_m3u", False):
                     self._write_m3u(new_files, title)
                 filepath = self.output_folder

@@ -65,7 +65,7 @@ class GitHubPublishWorker(QThread):
 
     def __init__(self, message: str, parent=None):
         super().__init__(parent)
-        self.message = message.strip() or "Prepare release 0.1.0"
+        self.message = message.strip() or "Prepare release 0.1.1"
 
     def _step(self, command: list[str], label: str, *, timeout: int = 120) -> bool:
         self.log.emit(f"\n> {label}")
@@ -181,7 +181,7 @@ class OwnerToolsPage(QWidget):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if reply == QMessageBox.StandardButton.Yes:
-            self._start_worker("Release 0.1.0")
+            self._start_worker("Release 0.1.1")
 
     def _start_worker(self, message: str):
         self.check_btn.setEnabled(False)

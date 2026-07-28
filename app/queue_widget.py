@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor
+from app.icon_button import ActionIconButton
 
 
 class QueueItemWidget(QWidget):
@@ -73,7 +74,7 @@ class QueueWidget(QWidget):
         self.table.setColumnWidth(3, 108)  # Статус
         self.table.setColumnWidth(5, 78)   # Скорость
         self.table.setColumnWidth(6, 52)   # ETA
-        self.table.setColumnWidth(7, 118)  # Действия
+        self.table.setColumnWidth(7, 132)  # Действия
 
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -110,14 +111,10 @@ class QueueWidget(QWidget):
         self.table.setItem(row, 5, QTableWidgetItem("—"))
         self.table.setItem(row, 6, QTableWidgetItem("—"))
 
-        pause_btn = QPushButton("⏸")
-        pause_btn.setFixedSize(28, 22)
-        pause_btn.setToolTip("Пауза")
+        pause_btn = ActionIconButton("pause", "Пауза")
         pause_btn.clicked.connect(lambda _, iid=item_id: self.pause_requested.emit(iid))
 
-        cancel_btn = QPushButton("✕")
-        cancel_btn.setFixedSize(28, 22)
-        cancel_btn.setToolTip("Отменить")
+        cancel_btn = ActionIconButton("cancel", "Отменить")
         cancel_btn.clicked.connect(lambda _, iid=item_id: self.cancel_requested.emit(iid))
         btn_widget = QWidget()
         btn_layout = QHBoxLayout(btn_widget)
@@ -165,13 +162,9 @@ class QueueWidget(QWidget):
         btn_layout = QHBoxLayout(btn_widget)
         btn_layout.setContentsMargins(4, 2, 4, 2)
         btn_layout.setSpacing(4)
-        resume_btn = QPushButton("▶")
-        resume_btn.setFixedSize(28, 22)
-        resume_btn.setToolTip("Продолжить")
+        resume_btn = ActionIconButton("resume", "Продолжить")
         resume_btn.clicked.connect(lambda _, iid=item_id: self.resume_requested.emit(iid))
-        cancel_btn = QPushButton("✕")
-        cancel_btn.setFixedSize(28, 22)
-        cancel_btn.setToolTip("Удалить из очереди")
+        cancel_btn = ActionIconButton("cancel", "Удалить из очереди")
         cancel_btn.clicked.connect(lambda _, iid=item_id: self.cancel_requested.emit(iid))
         btn_layout.addWidget(resume_btn)
         btn_layout.addWidget(cancel_btn)
@@ -207,9 +200,7 @@ class QueueWidget(QWidget):
         btn_layout.setSpacing(4)
 
         if success:
-            open_btn = QPushButton("📂")
-            open_btn.setFixedSize(30, 22)
-            open_btn.setToolTip("Открыть папку")
+            open_btn = ActionIconButton("folder", "Открыть папку")
             open_btn.clicked.connect(lambda _, iid=item_id: self.open_requested.emit(iid))
             btn_layout.addWidget(open_btn)
             mark = QLabel("✓")
@@ -217,13 +208,9 @@ class QueueWidget(QWidget):
             mark.setAlignment(Qt.AlignmentFlag.AlignCenter)
             btn_layout.addWidget(mark)
         else:
-            retry_btn = QPushButton("↻")
-            retry_btn.setFixedSize(30, 22)
-            retry_btn.setToolTip("Повторить")
+            retry_btn = ActionIconButton("retry", "Повторить")
             retry_btn.clicked.connect(lambda _, iid=item_id: self.retry_requested.emit(iid))
-            details_btn = QPushButton("!")
-            details_btn.setFixedSize(30, 22)
-            details_btn.setToolTip("Показать ошибку")
+            details_btn = ActionIconButton("details", "Показать ошибку")
             details_btn.clicked.connect(lambda _, iid=item_id: self.details_requested.emit(iid))
             btn_layout.addWidget(retry_btn)
             btn_layout.addWidget(details_btn)
