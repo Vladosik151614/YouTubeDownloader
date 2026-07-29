@@ -138,6 +138,7 @@ Do not paste cookies, passwords, tokens, private browser data or private local p
 - [User Agreement](USER_AGREEMENT.md)
 - [Changelog](CHANGELOG.md)
 - [Engineering Standards](docs/ENGINEERING_STANDARDS.md)
+- [Maintainer Workflow](docs/MAINTAINER_WORKFLOW.md)
 - [Product Roadmap](docs/PRODUCT_ROADMAP.md)
 
 ## FAQ
