@@ -18,6 +18,10 @@ Updated:
 - In-app Fix Report now includes the `0.1.3` changes as the latest expandable group.
 - GitHub release notes describe the localization and developer tooling fixes.
 
+Packaging note:
+
+- Inno Setup was not available on the maintainer computer during this build, so the release asset is the PyInstaller Windows executable published under the existing setup filename. A full wizard installer can be republished after Inno Setup is installed.
+
 ## 0.1.2
 
 Feature release for July 29, 2026.
