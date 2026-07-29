@@ -8,7 +8,7 @@ import platform
 import re
 from urllib.parse import quote, urlparse
 
-APP_VERSION = "0.1.2"
+APP_VERSION = "0.1.3"
 GITHUB_NEW_ISSUE_URL = "https://github.com/Vladosik151614/YouTubeDownloader/issues/new"
 
 

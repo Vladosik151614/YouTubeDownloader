@@ -21,6 +21,7 @@ MAX_FILE_BYTES = 45 * 1024
 UI_MODULES = {
     "app/settings_page.py",
     "app/queue_widget.py",
+    "app/localization.py",
 }
 
 TEMP_LINE_EXCEPTIONS = {

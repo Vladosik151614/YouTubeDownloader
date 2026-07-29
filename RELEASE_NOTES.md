@@ -1,5 +1,23 @@
 # Release Notes
 
+## 0.1.3
+
+Bug-fix release for July 29, 2026.
+
+Fixed:
+
+- Owner GitHub panel now follows the selected app language instead of leaving action buttons in English.
+- Russian, English, German and Italian labels were added for owner-only controls.
+- Format settings layout was rechecked in the desktop EXE: quality, FPS, container, codec, mode, encoder and Spotify fields no longer overlap.
+- Developer mode tabs now show functional action cards instead of plain text-only descriptions.
+- Release workflow now prepares public and owner assets before publishing GitHub Releases.
+
+Updated:
+
+- README install command and version text now point to `0.1.3`.
+- In-app Fix Report now includes the `0.1.3` changes as the latest expandable group.
+- GitHub release notes describe the localization and developer tooling fixes.
+
 ## 0.1.2
 
 Feature release for July 29, 2026.

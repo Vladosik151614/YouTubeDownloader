@@ -7,7 +7,7 @@
 
 A Windows desktop downloader for video, music, playlists, channels and clips from supported public services.
 
-Version target: `0.1.2`
+Version target: `0.1.3`
 
 ![Download screen](docs/assets/screenshots/01-download-annotated.png)
 
@@ -58,18 +58,18 @@ Version target: `0.1.2`
 
 ## Install From Command Line
 
-Version 0.1.2 is published as a Windows installer.
+Version 0.1.3 is published as a Windows installer.
 
 Normal install command:
 
 ```powershell
-irm "https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.2.exe" -OutFile "$env:TEMP\YouTubeDownloaderSetup.exe"; Start-Process "$env:TEMP\YouTubeDownloaderSetup.exe" -Wait
+irm "https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.3.exe" -OutFile "$env:TEMP\YouTubeDownloaderSetup.exe"; Start-Process "$env:TEMP\YouTubeDownloaderSetup.exe" -Wait
 ```
 
 Silent install command:
 
 ```powershell
-$url = "https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.2.exe"
+$url = "https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.3.exe"
 $installer = "$env:TEMP\YouTubeDownloaderSetup.exe"
 Invoke-WebRequest $url -OutFile $installer
 Start-Process $installer -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" -Wait

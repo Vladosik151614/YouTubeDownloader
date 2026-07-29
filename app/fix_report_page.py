@@ -13,13 +13,26 @@ from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QScrollArea, QToolBut
 from app.settings_manager import APP_DATA_DIR
 
 
-APP_VERSION = "0.1.2"
+APP_VERSION = "0.1.3"
 RELEASES = [
+    {
+        "version": "0.1.3",
+        "date": "2026-07-29",
+        "summary": "Localized owner controls, developer tools and release workflow checks.",
+        "expanded": True,
+        "fixes": [
+            ("Серьёзно", "#f0b84a", "Owner-панель на выбранном языке", "Кнопки владельца больше не остаются на английском при русском интерфейсе. Для Русского, English, Deutsch и Italiano добавлены отдельные подписи."),
+            ("Серьёзно", "#f0b84a", "Вкладка «Формат»", "Повторно проверена desktop-сборка: поля качества, кадров, контейнера, кодека, режима, энкодера и Spotify больше не накладываются друг на друга."),
+            ("Средне", "#c78cff", "Меню разработчика", "Вкладки разработчика получили реальные действия с кнопками: логи, support-отчёт, доступ, сеть, видео, файлы и проверки папок."),
+            ("Средне", "#c78cff", "GitHub Sync владельца", "Добавлена синхронизация исходников owner/public без создания нового GitHub Release, отдельно от публикации релизной версии."),
+            ("Инфо", "#54c76d", "GitHub-информация", "README, release notes и install-команды обновлены под версию 0.1.3."),
+        ],
+    },
     {
         "version": "0.1.2",
         "date": "2026-07-29",
         "summary": "Spotify music engine, separate music folders and release report grouping.",
-        "expanded": True,
+        "expanded": False,
         "fixes": [
             ("Критично", "#ff5a66", "Spotify engine", "Добавлен отдельный music-engine на базе spotDL: Spotify-ссылки больше не отправляются в yt-dlp, а обрабатываются отдельным аудио-пайплайном."),
             ("Серьёзно", "#f0b84a", "Spotify загрузки", "Поддержаны Spotify треки, альбомы и плейлисты через метаданные Spotify и поиск доступного аудиоисточника с сохранением музыки в MP3."),
