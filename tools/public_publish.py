@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_REPO = "https://github.com/Vladosik151614/YouTubeDownloader.git"
 SKIP_DIRS = {".git", "build", "dist", "release", "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache"}
 SKIP_NAMES = {
+    "MAINTAINER_WORKFLOW.md",
     "owner_tools.py",
     "owner_diagnostics.py",
     "owner_sync.py",
@@ -93,6 +94,7 @@ def patch_owner_imports(target: Path) -> None:
         if start != -1:
             end = text.find("\n\n", start)
             text = text[:start] + text[end + 2 if end != -1 else len(text):]
+        text = text.replace("- [Maintainer Workflow](docs/MAINTAINER_WORKFLOW.md)\n", "")
         readme.write_text(text, encoding="utf-8")
 
 
