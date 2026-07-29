@@ -1,72 +1,103 @@
 # YouTube Downloader
 
+A clean Windows desktop app for downloading public video and music links with a real queue, quality controls, local settings, and a privacy-first workflow.
+
+It is built for people who want a normal Windows app instead of command-line tools: paste a link, choose quality, add it to the queue, and manage downloads from one interface.
+
 [![CI](https://github.com/Vladosik151614/YouTubeDownloader/actions/workflows/ci.yml/badge.svg)](https://github.com/Vladosik151614/YouTubeDownloader/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/Vladosik151614/YouTubeDownloader?label=release)](https://github.com/Vladosik151614/YouTubeDownloader/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/Vladosik151614/YouTubeDownloader/total?label=downloads)](https://github.com/Vladosik151614/YouTubeDownloader/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-A Windows desktop downloader for video, music, playlists, channels and clips from supported public services.
+![Main download screen](docs/assets/screenshots/01-main-download.png)
 
-Version target: `0.1.3`
+## Quick Value
 
-![Download screen](docs/assets/screenshots/01-download-annotated.png)
+- Real Windows desktop app, not only a CLI script.
+- Download queue with pause, retry, cancel and open-folder actions.
+- Quality, FPS, container and H.264 conversion controls.
+- Public downloads work without account sign-in where supported.
+- Restricted content can use a separate app Chrome profile.
+- Local-first storage: settings, logs and history stay on your computer.
+- Sanitized support reports that avoid cookies, tokens and private paths.
+
+## Download
+
+Latest Windows installer:
+[Download YouTube Downloader for Windows](https://github.com/Vladosik151614/YouTubeDownloader/releases/latest)
+
+Direct installer link:
+[YouTubeDownloaderSetup-0.1.3.exe](https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.3.exe)
+
+Read the [Privacy Policy](PRIVACY.md) before sharing logs or publishing builds.
+
+## Why Choose This App?
+
+Most downloader tools are either command-line utilities, ad-heavy websites, or unclear installers. This project focuses on a simple Windows desktop experience:
+
+- No browser extension required.
+- No normal Chrome profile sharing by default.
+- No cloud account required for public downloads.
+- Clear queue and history instead of one-time download buttons.
+- Separate service folders and local settings.
+- Safer bug reports that avoid leaking private data.
 
 ## Features
 
-- Download video and audio from supported services.
-- Save YouTube, Spotify, SoundCloud, Twitch and TikTok content where supported by the download system.
-- Choose quality, FPS, container and H.264 conversion profile.
-- Use a separate app Chrome profile for restricted content when sign-in is required.
-- Keep public downloads working without account sign-in.
-- Download history, retry, open folder and queue controls.
-- Built-in bug-fix report with dated release notes.
-- Pause and continue downloads using the same partial files where the service supports resume.
-- Local browser interface for development checks: `python main.py --web`.
-- Structured proxy settings and a lightweight speed check for concurrency recommendations.
-- Background tray mode, exit confirmation and completion notifications.
-- Sanitized support reports that avoid cookies, tokens and local user paths.
-- Local settings and history stored outside the source folder.
-- Separate service folders for Spotify, SoundCloud, YouTube, Twitch and TikTok.
+- Windows GUI downloader for videos, music, playlists, channels and clips where supported.
+- Multi-service workflow for YouTube, TikTok, Twitch, SoundCloud, Spotify metadata resolving and other supported links.
+- Download profiles for video/audio type, quality, FPS, container, codec and encoder mode.
+- Optional H.264 conversion with GPU-first mode and CPU fallback.
+- Local history, queue actions, retry, pause, cancel and open-folder controls.
+- Separate folders for services and media types.
+- Optional separate app Chrome profile for account-required content.
+- Proxy settings, notification settings and lightweight speed checks.
+- Developer diagnostics and sanitized support reports.
+- Windows installer with normal and silent install support.
 
-## Documentation
+## Screenshots
 
-- [User Guide EN](docs/USER_GUIDE_EN.md)
-- [Руководство RU](docs/USER_GUIDE_RU.md)
-- [Privacy Policy](PRIVACY.md)
-- [User Agreement](USER_AGREEMENT.md)
-- [Changelog](CHANGELOG.md)
-- [Engineering Standards](docs/ENGINEERING_STANDARDS.md)
+| Main download screen | History and queue |
+| --- | --- |
+| ![Main download screen](docs/assets/screenshots/01-main-download.png) | ![History and queue](docs/assets/screenshots/02-queue-history.png) |
 
-## Default Download Profile
+| Quality settings | Account access |
+| --- | --- |
+| ![Quality settings](docs/assets/screenshots/03-quality-settings.png) | ![Account access](docs/assets/screenshots/04-accounts-profile.png) |
 
-- Video
-- 1080p
-- Up to 60 FPS
-- MP4
-- H.264
-- Automatic GPU encoder when available, CPU fallback
+| Fix and support report | Theme preview |
+| --- | --- |
+| ![Fix and support report](docs/assets/screenshots/05-privacy-report.png) | ![Theme preview](docs/assets/screenshots/06-theme-preview.png) |
+
+## Supported Services
+
+| Service | Support | Notes |
+| --- | --- | --- |
+| YouTube | Video, audio and playlists where supported | Public content should work without sign-in |
+| TikTok | Video where supported | Depends on source availability |
+| Twitch | Clips and videos where supported | Some content may require access |
+| SoundCloud | Audio where supported | Depends on provider/source |
+| Spotify | Metadata-based music resolving | DRM-protected Spotify audio is not decrypted |
 
 ## Basic Usage
 
 1. Open the app.
-2. Paste a supported link.
+2. Paste a supported video, music, playlist, channel or clip link.
 3. Choose a download profile if needed.
-4. Click `Add`.
+4. Click `Download`.
 5. Watch the queue progress.
 6. Use pause, retry or cancel from the queue when needed.
-7. Click the folder icon to open the saved file location.
+7. Click the folder action to open the saved file location.
 
 ## Install From Command Line
 
-Version 0.1.3 is published as a Windows installer.
-
-Normal install command:
+Normal install:
 
 ```powershell
 irm "https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.3.exe" -OutFile "$env:TEMP\YouTubeDownloaderSetup.exe"; Start-Process "$env:TEMP\YouTubeDownloaderSetup.exe" -Wait
 ```
 
-Silent install command:
+Silent install:
 
 ```powershell
 $url = "https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.3.exe"
@@ -77,24 +108,87 @@ Start-Process $installer -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART
 
 ## Account Access
 
-Sign-in is optional. Public content should download without an account.
+Sign-in is optional. Public content should work without an account where supported by the download system.
 
-For restricted content, open `Accounts`, choose the service and sign in once in the separate Chrome window opened by the app. The app will refresh access data automatically when needed.
+For restricted content, open `Accounts`, choose the service and sign in once in the separate Chrome window opened by the app. The app is designed to use a separate app Chrome profile instead of your normal browser profile by default.
 
-The app does not use your normal Chrome profile by default.
+Spotify support uses metadata resolving through available audio providers. DRM-protected Spotify audio is not decrypted.
 
-Spotify support uses a separate music engine. Spotify tracks, albums and playlists are resolved through Spotify metadata and downloaded from available audio providers; DRM-protected Spotify audio is not decrypted.
+## Privacy and Safety
 
-## Privacy
+This app is designed as a local Windows desktop tool. Settings, logs, history and access data are stored locally on your computer. Support reports are sanitized to avoid cookies, tokens and private local paths.
 
-The app stores settings, logs, history and access data locally on your computer. It must not include cookies, logs, settings, build folders or personal paths in the GitHub repository.
+For restricted content, the app uses a separate app Chrome profile instead of your normal browser profile by default.
 
-Read [PRIVACY.md](PRIVACY.md) before publishing a release.
+Do not paste cookies, passwords, tokens, private browser data or private local paths into public GitHub issues.
+
+## What This App Is Not
+
+- It is not a DRM bypass tool.
+- It does not decrypt protected Spotify audio.
+- It does not upload your cookies or local history to a server.
+- It is not a web converter site.
+- It is not a replacement for respecting creator rights or platform terms.
+
+## Documentation
+
+- [User Guide EN](docs/USER_GUIDE_EN.md)
+- [Руководство RU](docs/USER_GUIDE_RU.md)
+- [Privacy Policy](PRIVACY.md)
+- [User Agreement](USER_AGREEMENT.md)
+- [Changelog](CHANGELOG.md)
+- [Engineering Standards](docs/ENGINEERING_STANDARDS.md)
+- [Product Roadmap](docs/PRODUCT_ROADMAP.md)
+
+## FAQ
+
+### Does it work without signing in?
+
+Public content should work without account sign-in where supported by the download engine.
+
+### Does it use my normal Chrome profile?
+
+No. Restricted content uses a separate app Chrome profile by default.
+
+### Can it download Spotify songs directly?
+
+Spotify support uses metadata resolving through available audio providers. DRM-protected Spotify audio is not decrypted.
+
+### Where are settings and history stored?
+
+They are stored locally outside the source folder, under the app data folder on Windows.
+
+### Is this a web converter?
+
+No. It is a Windows desktop app.
+
+### Why can some links fail?
+
+Services can change their pages, block access, require sign-in, limit regions, or restrict downloads.
 
 ## Reporting Problems
 
-For release builds, the app provides a sanitized error report that can be copied or opened as a GitHub issue. Reports must not include cookies, passwords or private tokens.
+Use GitHub Issues for bugs and feature requests:
 
-## Maintainer Tools
+- [Report a bug](https://github.com/Vladosik151614/YouTubeDownloader/issues/new?template=bug_report.yml)
+- [Report a download error](https://github.com/Vladosik151614/YouTubeDownloader/issues/new?template=download_error.yml)
+- [Request a feature](https://github.com/Vladosik151614/YouTubeDownloader/issues/new?template=feature_request.yml)
 
+When reporting a problem, include the app version, Windows version, link type, what you clicked, and the sanitized support report if available. Do not include cookies, tokens, passwords, private links or private local paths.
 
+## Development
+
+Before committing or publishing changes, run:
+
+```powershell
+python tools\privacy_check.py
+python tools\quality_check.py
+```
+
+Generated folders such as `build/`, `dist/` and `release/` must not be committed. Owner-only maintainer tools are kept out of the public repository.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution and issue-reporting rules.
+
+## License
+
+MIT License. See [LICENSE](LICENSE).

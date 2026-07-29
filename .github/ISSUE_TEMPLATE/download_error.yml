@@ -24,6 +24,7 @@ body:
         - SoundCloud
         - Twitch
         - TikTok
+        - Spotify
         - Other
     validations:
       required: true

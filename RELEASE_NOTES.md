@@ -17,6 +17,7 @@ Updated:
 - README install command and version text now point to `0.1.3`.
 - In-app Fix Report now includes the `0.1.3` changes as the latest expandable group.
 - GitHub release notes describe the localization and developer tooling fixes.
+- Public repository presentation now has current screenshots, clearer service limits, privacy-first wording and a stronger download section.
 
 Packaging:
 

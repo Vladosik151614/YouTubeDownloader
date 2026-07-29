@@ -2,6 +2,15 @@
 
 All notable public release changes should be documented here.
 
+## 0.1.3 - 2026-07-29
+
+- Fixed owner GitHub panel localization for Russian, English, German and Italian.
+- Fixed owner panel button labels so they fit cleanly in the current UI.
+- Rechecked the Format settings layout in the desktop app.
+- Added functional Developer Mode action cards for logs, support reports, access, network, video and files.
+- Published a Windows installer built with Inno Setup 6.7.3.
+- Refreshed public README positioning, screenshots, privacy notes and release instructions.
+
 ## 0.1.2 - 2026-07-29
 
 - Added Spotify support through a separate spotDL-based music engine.

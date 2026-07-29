@@ -66,7 +66,7 @@ winget install <publisher>.YouTubeDownloader
 
 ## Главный Экран
 
-![Главный экран](assets/screenshots/01-download-annotated.png)
+![Главный экран](assets/screenshots/01-main-download.png)
 
 1. Поле ссылки. Вставьте ссылку на видео, плейлист, канал, музыку или клип.
 2. Быстрый профиль загрузки. Здесь выбираются качество, контейнер и энкодер.
@@ -93,7 +93,7 @@ winget install <publisher>.YouTubeDownloader
 
 ## Настройки
 
-![Основные настройки](assets/screenshots/02-settings-general-annotated.png)
+![Основные настройки](assets/screenshots/06-theme-preview.png)
 
 1. Категории настроек.
 2. Язык интерфейса: русский, английский, немецкий, итальянский.
@@ -109,7 +109,7 @@ winget install <publisher>.YouTubeDownloader
 
 ## Формат И Кодирование
 
-![Формат](assets/screenshots/03-format-annotated.png)
+![Формат](assets/screenshots/03-quality-settings.png)
 
 1. Разрешение: лучшее, 2160p, 1440p, 1080p, 720p, 480p.
 2. FPS: лучшее, 60 FPS или 30 FPS.
@@ -129,7 +129,7 @@ winget install <publisher>.YouTubeDownloader
 
 ## Соединение И Скорость
 
-![Соединение](assets/screenshots/04-connection-annotated.png)
+![Соединение](assets/screenshots/03-quality-settings.png)
 
 1. Максимум одновременных загрузок.
 2. Проверка скорости сети и рекомендация количества загрузок.
@@ -139,7 +139,7 @@ winget install <publisher>.YouTubeDownloader
 
 ## Плейлисты И Каналы
 
-![Плейлисты](assets/screenshots/05-playlists-annotated.png)
+![Плейлисты](assets/screenshots/01-main-download.png)
 
 1. Подпапки создают отдельные папки для плейлистов, каналов и результатов поиска.
 2. Нумерация сохраняет порядок элементов.
@@ -150,7 +150,7 @@ winget install <publisher>.YouTubeDownloader
 
 ## Уведомления
 
-![Уведомления](assets/screenshots/06-notifications-annotated.png)
+![Уведомления](assets/screenshots/06-theme-preview.png)
 
 1. Уведомления о завершении загрузки и обработки показывают статус без открытия окна.
 2. Подтверждение выхода защищает от случайного закрытия приложения во время активных загрузок.
@@ -160,7 +160,7 @@ winget install <publisher>.YouTubeDownloader
 
 ## Настройки Доступа
 
-![Настройки доступа](assets/screenshots/07-access-settings-annotated.png)
+![Настройки доступа](assets/screenshots/04-accounts-profile.png)
 
 1. Автоматическое обновление доступа используется, когда сервис требует вход.
 2. Ручной выбор браузера нужен только для диагностики.
@@ -170,7 +170,7 @@ winget install <publisher>.YouTubeDownloader
 
 ## Аккаунты И Доступ
 
-![Аккаунты](assets/screenshots/08-accounts-annotated.png)
+![Аккаунты](assets/screenshots/04-accounts-profile.png)
 
 1. Вход не обязателен для публичного контента.
 2. Для каждого сервиса можно открыть отдельное окно входа.
@@ -186,7 +186,7 @@ winget install <publisher>.YouTubeDownloader
 
 ## История
 
-![История](assets/screenshots/09-history-annotated.png)
+![История](assets/screenshots/02-queue-history.png)
 
 1. История показывает завершенные и ошибочные загрузки.
 
@@ -231,6 +231,7 @@ python tools\privacy_check.py
 - TikTok с учетом возможных сетевых ограничений.
 - Пауза, продолжение, отмена и повтор.
 - Установка и удаление через `YouTubeDownloaderSetup-0.1.2.exe`.
+
 
 
 

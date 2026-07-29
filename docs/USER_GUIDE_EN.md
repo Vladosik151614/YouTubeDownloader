@@ -66,7 +66,7 @@ winget install <publisher>.YouTubeDownloader
 
 ## Download Screen
 
-![Download screen](assets/screenshots/01-download-annotated.png)
+![Download screen](assets/screenshots/01-main-download.png)
 
 1. Link field. Paste a video, playlist, channel, music or clip URL.
 2. Quick download profile. Choose quality, container and encoder.
@@ -93,7 +93,7 @@ Queue actions:
 
 ## Settings
 
-![General settings](assets/screenshots/02-settings-general-annotated.png)
+![General settings](assets/screenshots/06-theme-preview.png)
 
 1. Settings categories.
 2. Interface language: Russian, English, German, Italian.
@@ -109,7 +109,7 @@ General settings include:
 
 ## Format And Encoding
 
-![Format settings](assets/screenshots/03-format-annotated.png)
+![Format settings](assets/screenshots/03-quality-settings.png)
 
 1. Resolution: best, 2160p, 1440p, 1080p, 720p, 480p.
 2. FPS: best, 60 FPS or 30 FPS.
@@ -129,7 +129,7 @@ Audio-only downloads do not use video conversion. The app does not ask for H.264
 
 ## Connection And Speed
 
-![Connection settings](assets/screenshots/04-connection-annotated.png)
+![Connection settings](assets/screenshots/03-quality-settings.png)
 
 1. Maximum concurrent downloads.
 2. Network speed check and concurrency recommendation.
@@ -139,7 +139,7 @@ Proxy is optional. Use it only when a service blocks the current network or when
 
 ## Playlists And Channels
 
-![Playlists](assets/screenshots/05-playlists-annotated.png)
+![Playlists](assets/screenshots/01-main-download.png)
 
 1. Subfolders create separate folders for playlists, channels and search results.
 2. Numbering keeps items in source order.
@@ -150,7 +150,7 @@ These settings matter most for large playlists and channels because they keep fi
 
 ## Notifications
 
-![Notifications](assets/screenshots/06-notifications-annotated.png)
+![Notifications](assets/screenshots/06-theme-preview.png)
 
 1. Download and processing notifications report completion without opening the window.
 2. Exit confirmation helps avoid accidentally closing the app while downloads are active.
@@ -160,7 +160,7 @@ When background mode is enabled, the app can stay in the tray and report complet
 
 ## Access Settings
 
-![Access settings](assets/screenshots/07-access-settings-annotated.png)
+![Access settings](assets/screenshots/04-accounts-profile.png)
 
 1. Automatic access refresh is used when a service requires sign-in.
 2. Manual browser selection is for diagnostics.
@@ -170,7 +170,7 @@ Normal users usually do not need to change this section. Public links should dow
 
 ## Accounts And Access
 
-![Accounts](assets/screenshots/08-accounts-annotated.png)
+![Accounts](assets/screenshots/04-accounts-profile.png)
 
 1. Sign-in is optional for public content.
 2. Each service can open its own isolated sign-in window.
@@ -186,7 +186,7 @@ If a public download works without sign-in, do not sign in.
 
 ## History
 
-![History](assets/screenshots/09-history-annotated.png)
+![History](assets/screenshots/02-queue-history.png)
 
 1. History lists completed and failed downloads.
 
@@ -231,6 +231,7 @@ python tools\privacy_check.py
 - TikTok, considering possible network restrictions.
 - Pause, continue, cancel and retry.
 - Install and uninstall through `YouTubeDownloaderSetup-0.1.2.exe`.
+
 
 
 

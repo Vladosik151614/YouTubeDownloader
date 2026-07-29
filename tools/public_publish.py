@@ -52,6 +52,8 @@ def should_skip(path: Path) -> bool:
     rel = path.relative_to(ROOT)
     if set(rel.parts) & SKIP_DIRS:
         return True
+    if rel.parts[:3] == ("docs", "assets", "screenshots") and path.suffix.lower() == ".png":
+        return False
     return path.name in SKIP_NAMES or path.suffix.lower() in SKIP_SUFFIXES
 
 

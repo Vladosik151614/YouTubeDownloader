@@ -3,6 +3,10 @@ description: Suggest an improvement
 title: "[Feature]: "
 labels: ["enhancement"]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Please do not include private account links, cookies, tokens, passwords, or private local paths.
   - type: textarea
     id: problem
     attributes:
@@ -17,3 +21,16 @@ body:
       description: What should the app do?
     validations:
       required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Download queue
+        - Quality or format settings
+        - Accounts or access
+        - History
+        - Privacy or support reports
+        - Installer or updates
+        - Documentation
+        - Other

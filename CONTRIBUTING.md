@@ -34,3 +34,25 @@ Do not commit:
 - The quality check passes.
 - The app still starts locally.
 - Documentation is updated when UI or behavior changes.
+
+## Reporting Bugs
+
+Please include:
+
+- app version;
+- Windows version;
+- service/link type, for example YouTube playlist or SoundCloud track;
+- what you clicked before the problem happened;
+- the visible error message;
+- a sanitized support report from the app, if available.
+
+Do not include:
+
+- cookies;
+- passwords;
+- tokens or API keys;
+- private browser data;
+- private local file paths;
+- private account-only links.
+
+If a report contains private data, it may be removed instead of debugged.
