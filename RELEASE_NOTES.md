@@ -18,9 +18,9 @@ Updated:
 - In-app Fix Report now includes the `0.1.3` changes as the latest expandable group.
 - GitHub release notes describe the localization and developer tooling fixes.
 
-Packaging note:
+Packaging:
 
-- Inno Setup was not available on the maintainer computer during this build, so the release asset is the PyInstaller Windows executable published under the existing setup filename. A full wizard installer can be republished after Inno Setup is installed.
+- The `YouTubeDownloaderSetup-0.1.3.exe` asset is built with Inno Setup 6.7.3 and supports normal and silent Windows installation.
 
 ## 0.1.2
 

@@ -56,25 +56,24 @@ Version target: `0.1.3`
 6. Use pause, retry or cancel from the queue when needed.
 7. Click the folder icon to open the saved file location.
 
-## Run From Command Line
+## Install From Command Line
 
-Version 0.1.3 is published as a Windows executable release asset.
+Version 0.1.3 is published as a Windows installer.
 
-Download and run:
+Normal install command:
 
 ```powershell
 irm "https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.3.exe" -OutFile "$env:TEMP\YouTubeDownloaderSetup.exe"; Start-Process "$env:TEMP\YouTubeDownloaderSetup.exe" -Wait
 ```
 
-Download only:
+Silent install command:
 
 ```powershell
 $url = "https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.3.exe"
 $installer = "$env:TEMP\YouTubeDownloaderSetup.exe"
 Invoke-WebRequest $url -OutFile $installer
+Start-Process $installer -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" -Wait
 ```
-
-Note: a full Windows installer can be published when Inno Setup is available on the maintainer computer.
 
 ## Account Access
 
