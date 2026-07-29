@@ -7,11 +7,12 @@ import winreg
 
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
-    QFileDialog, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
-    QPushButton, QComboBox, QTabWidget, QVBoxLayout, QWidget,
+    QFileDialog, QFormLayout, QGridLayout, QGroupBox, QHBoxLayout, QLabel,
+    QLineEdit, QMessageBox, QPushButton, QComboBox, QTabWidget, QVBoxLayout, QWidget,
 )
 
 from app.converter import available_encoders
+from app.settings_developer_actions import install_developer_actions
 from app.settings_developer import build_developer_tab
 from app.settings_manager import save_settings
 from app.speed_test import SpeedTestWorker
@@ -22,6 +23,14 @@ from app.updater import AppUpdateWorker, UpdateWorker
 THEME_OPTIONS = (("lux_graphite", "Люкс графит"), ("lux_midnight", "Люкс ночная"), ("lux_silver", "Люкс светлая"))
 THEME_INDEX = {key: index for index, (key, _) in enumerate(THEME_OPTIONS)}
 THEME_BY_INDEX = {index: key for index, (key, _) in enumerate(THEME_OPTIONS)}
+
+
+def _combo(values: list[str], width: int = 260) -> QComboBox:
+    combo = QComboBox()
+    combo.addItems(values)
+    combo.setMinimumWidth(width)
+    combo.setFixedHeight(36)
+    return combo
 
 
 def _apply_startup(enabled: bool):
@@ -61,6 +70,7 @@ class SettingsPage(QWidget):
         layout.addWidget(title)
 
         self.tabs = QTabWidget()
+        self.tabs.setUsesScrollButtons(False)
         self.tabs.addTab(self._general_tab(), "Основные")
         self.tabs.addTab(self._format_tab(), "Формат")
         self.tabs.addTab(self._playlist_tab(), "Плейлисты")
@@ -95,6 +105,38 @@ class SettingsPage(QWidget):
         parent_layout.addWidget(group)
         return form
 
+    def _grid_group(self, title: str, parent_layout: QVBoxLayout) -> tuple[QGroupBox, QGridLayout]:
+        group = QGroupBox(title)
+        grid = QGridLayout(group)
+        grid.setContentsMargins(20, 22, 20, 18)
+        grid.setHorizontalSpacing(18)
+        grid.setVerticalSpacing(12)
+        grid.setColumnMinimumWidth(0, 95)
+        grid.setColumnStretch(1, 1)
+        grid.setColumnMinimumWidth(2, 95)
+        grid.setColumnStretch(3, 1)
+        parent_layout.addWidget(group)
+        return group, grid
+
+    def _grid_row(self, grid: QGridLayout, row: int, label_text: str, widget: QWidget, column: int = 0):
+        label = QLabel(label_text)
+        label.setMinimumWidth(90)
+        grid.setRowMinimumHeight(row, 46)
+        grid.addWidget(label, row, column)
+        grid.addWidget(widget, row, column + 1)
+
+    def _grid_switch(self, grid: QGridLayout, row: int, attr: str, text: str, column: int = 0):
+        wrap = QHBoxLayout()
+        widget = ToggleSwitch()
+        label = QLabel(text)
+        label.setWordWrap(True)
+        grid.setRowMinimumHeight(row, 40)
+        wrap.addWidget(widget)
+        wrap.addWidget(label, 1)
+        grid.addLayout(wrap, row, column, 1, 2)
+        setattr(self, attr, widget)
+        return widget
+
     def _switch(self, form: QFormLayout, attr: str, text: str):
         row = QHBoxLayout()
         widget = ToggleSwitch()
@@ -120,12 +162,10 @@ class SettingsPage(QWidget):
         form.addRow("Папка:", folder_row)
         self._switch(form, "auto_route_folders_sw", "Автоматически раскладывать загрузки по сервисам и типам")
 
-        self.theme_combo = QComboBox()
-        self.theme_combo.addItems([label for _, label in THEME_OPTIONS])
+        self.theme_combo = _combo([label for _, label in THEME_OPTIONS])
         form.addRow("Тема:", self.theme_combo)
 
-        self.language_combo = QComboBox()
-        self.language_combo.addItems(["Русский", "English", "Deutsch", "Italiano"])
+        self.language_combo = _combo(["Русский", "English", "Deutsch", "Italiano"])
         form.addRow("Язык:", self.language_combo)
 
         self._switch(form, "background_on_close_sw", "Переходить в фоновый режим при закрытии окна")
@@ -148,47 +188,45 @@ class SettingsPage(QWidget):
 
     def _format_tab(self):
         page, layout = self._page()
-        form = self._group("Загрузка", layout)
+        _, grid = self._grid_group("Загрузка", layout)
+        row = 0
 
-        self.download_type_combo = QComboBox()
-        self.download_type_combo.addItems(["Видео", "Только аудио", "Картинки/миниатюры", "Документы/описания"])
-        form.addRow("Тип:", self.download_type_combo)
+        self.download_type_combo = _combo(["Видео", "Только аудио", "Картинки/миниатюры", "Документы/описания"], 260)
+        self._grid_row(grid, row, "Тип:", self.download_type_combo)
+        self.quality_combo = _combo(["Лучшее", "2160p", "1440p", "1080p", "720p", "480p"])
+        self._grid_row(grid, row, "Качество:", self.quality_combo, 2)
+        row += 1
 
-        self.quality_combo = QComboBox()
-        self.quality_combo.addItems(["Лучшее", "2160p", "1440p", "1080p", "720p", "480p"])
-        form.addRow("Качество:", self.quality_combo)
-        self.fps_combo = QComboBox()
-        self.fps_combo.addItems(["Лучшее", "60 FPS", "30 FPS"])
-        form.addRow("Кадры:", self.fps_combo)
-        self.container_combo = QComboBox()
-        self.container_combo.addItems(["MP4", "MKV", "WebM"])
-        form.addRow("Контейнер:", self.container_combo)
-        self.codec_combo = QComboBox()
-        form.addRow("Кодек:", self.codec_combo)
-        self.encoding_mode_combo = QComboBox()
-        self.encoding_mode_combo.addItems(["Авто: видеокарта, потом процессор", "Только видеокарта", "Только процессор"])
-        form.addRow("Режим:", self.encoding_mode_combo)
+        self.fps_combo = _combo(["Лучшее", "60 FPS", "30 FPS"])
+        self._grid_row(grid, row, "Кадры:", self.fps_combo)
+        self.container_combo = _combo(["MP4", "MKV", "WebM"])
+        self._grid_row(grid, row, "Контейнер:", self.container_combo, 2)
+        row += 1
 
-        self.encoder_combo = QComboBox()
-        self.encoder_combo.addItems(["Авто", "NVIDIA NVENC", "Intel Quick Sync", "AMD AMF", "CPU x264"])
-        form.addRow("Энкодер:", self.encoder_combo)
+        self.codec_combo = _combo([])
+        self._grid_row(grid, row, "Кодек:", self.codec_combo)
+        self.encoding_mode_combo = _combo(["Авто: видеокарта, потом процессор", "Только видеокарта", "Только процессор"], 290)
+        self._grid_row(grid, row, "Режим:", self.encoding_mode_combo, 2)
+        row += 1
 
+        self.encoder_combo = _combo(["Авто", "NVIDIA NVENC", "Intel Quick Sync", "AMD AMF", "CPU x264"])
+        self._grid_row(grid, row, "Энкодер:", self.encoder_combo)
         self.encoder_status_label = QLabel("")
         self.encoder_status_label.setObjectName("subtle")
-        form.addRow("Доступно:", self.encoder_status_label)
+        self._grid_row(grid, row, "Доступно:", self.encoder_status_label, 2)
+        row += 1
 
-        self._switch(form, "auto_convert_sw", "Автоматически менять кодек после скачивания, если выбран не оригинал")
-        self._switch(form, "ask_codec_convert_sw", "Спрашивать перед сменой кодека")
-        self._switch(form, "keep_originals_sw", "Сохранять оригиналы после конвертации")
-        self._switch(form, "show_all_codecs_sw", "Показывать AV1 и VP9")
+        self._grid_switch(grid, row, "auto_convert_sw", "Автоматически менять кодек после скачивания, если выбран не оригинал")
+        self._grid_switch(grid, row, "ask_codec_convert_sw", "Спрашивать перед сменой кодека", 2)
+        row += 1
+        self._grid_switch(grid, row, "keep_originals_sw", "Сохранять оригиналы после конвертации")
+        self._grid_switch(grid, row, "show_all_codecs_sw", "Показывать AV1 и VP9", 2)
 
-        music_form = self._group("Музыка Spotify", layout)
-        self.spotify_format_combo = QComboBox()
-        self.spotify_format_combo.addItems(["MP3", "M4A", "Opus", "FLAC", "WAV"])
-        music_form.addRow("Формат:", self.spotify_format_combo)
-        self.spotify_bitrate_combo = QComboBox()
-        self.spotify_bitrate_combo.addItems(["320k", "256k", "192k", "160k", "128k", "Авто"])
-        music_form.addRow("Битрейт:", self.spotify_bitrate_combo)
+        _, music_grid = self._grid_group("Музыка Spotify", layout)
+        self.spotify_format_combo = _combo(["MP3", "M4A", "Opus", "FLAC", "WAV"])
+        self._grid_row(music_grid, 0, "Формат:", self.spotify_format_combo)
+        self.spotify_bitrate_combo = _combo(["320k", "256k", "192k", "160k", "128k", "Авто"])
+        self._grid_row(music_grid, 0, "Битрейт:", self.spotify_bitrate_combo, 2)
         layout.addStretch()
         return page
 
@@ -504,3 +542,6 @@ class SettingsPage(QWidget):
         _apply_startup(self.settings.get("launch_on_startup", False))
         save_settings(self.settings)
         self.settings_changed.emit(self.settings)
+
+
+install_developer_actions(SettingsPage)

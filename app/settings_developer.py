@@ -2,7 +2,7 @@
 settings_developer.py - developer-mode settings section.
 """
 
-from PySide6.QtWidgets import QGroupBox, QHBoxLayout, QLabel, QLineEdit, QPushButton, QTabWidget, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QFrame, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QPushButton, QTabWidget, QVBoxLayout, QWidget
 
 from app.developer_advice import developer_advice_label
 from app.toggle_switch import ToggleSwitch
@@ -17,9 +17,52 @@ def _note(text: str) -> QLabel:
 
 def _simple_page(owner, rows: list[tuple[str, str]]) -> QWidget:
     page, layout = owner._page()
-    form = owner._group("Инструменты", layout)
+    group = QGroupBox("Инструменты")
+    group_layout = QVBoxLayout(group)
+    group_layout.setContentsMargins(14, 18, 14, 14)
+    group_layout.setSpacing(10)
     for name, value in rows:
-        form.addRow(name, _note(value))
+        card = QFrame()
+        card.setObjectName("developer_tool_card")
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(12, 9, 12, 10)
+        card_layout.setSpacing(4)
+        title = QLabel(name)
+        title.setObjectName("developer_tool_title")
+        title.setWordWrap(True)
+        description = _note(value)
+        card_layout.addWidget(title)
+        card_layout.addWidget(description)
+        group_layout.addWidget(card)
+    layout.addWidget(group)
+    layout.addStretch()
+    return page
+
+
+def _action_page(owner, rows: list[tuple[str, str, str]]) -> QWidget:
+    page, layout = owner._page()
+    group = QGroupBox("Инструменты")
+    group_layout = QVBoxLayout(group)
+    group_layout.setContentsMargins(14, 18, 14, 14)
+    group_layout.setSpacing(10)
+    for title_text, description_text, method_name in rows:
+        card = QFrame()
+        card.setObjectName("developer_tool_card")
+        row = QHBoxLayout(card)
+        row.setContentsMargins(12, 9, 12, 10)
+        text_col = QVBoxLayout()
+        title = QLabel(title_text)
+        title.setObjectName("developer_tool_title")
+        title.setWordWrap(True)
+        text_col.addWidget(title)
+        text_col.addWidget(_note(description_text))
+        button = QPushButton("Выполнить")
+        button.setMinimumWidth(118)
+        button.clicked.connect(getattr(owner, method_name))
+        row.addLayout(text_col, 1)
+        row.addWidget(button)
+        group_layout.addWidget(card)
+    layout.addWidget(group)
     layout.addStretch()
     return page
 
@@ -41,6 +84,7 @@ def build_developer_tab(owner) -> QWidget:
     panel_layout.setContentsMargins(0, 0, 0, 0)
     panel_layout.setSpacing(10)
     tabs = QTabWidget()
+    tabs.setUsesScrollButtons(False)
     panel_layout.addWidget(tabs)
 
     diag_page, diag_layout = owner._page()
@@ -50,34 +94,34 @@ def build_developer_tab(owner) -> QWidget:
     diag_layout.addWidget(developer_advice_label())
     tabs.addTab(diag_page, "Диагностика")
 
-    tabs.addTab(_simple_page(owner, [
-        ("Последний лог:", "Показывать последние события загрузки, обработки и доступа."),
-        ("Последние ошибки:", "Показывать понятную ошибку и техническую строку отдельно."),
-        ("Экспорт:", "Сохранять безопасный TXT-отчёт без cookies, токенов и паролей."),
+    tabs.addTab(_action_page(owner, [
+        ("Последний лог", "Показать последние события загрузки, обработки и доступа.", "_developer_show_latest_log"),
+        ("Открыть папку логов", "Открыть локальную папку логов приложения.", "_developer_open_logs"),
+        ("Скопировать отчёт", "Скопировать безопасный отчёт без cookies, токенов и паролей.", "_developer_copy_support_report"),
     ]), "Логи")
 
-    tabs.addTab(_simple_page(owner, [
-        ("Проверка скорости:", "Подбор параллельных загрузок под интернет пользователя."),
-        ("Прокси:", "Подробные поля находятся в разделе Соединение."),
-        ("Повторы:", "Настройки повторов и таймаутов для нестабильной сети."),
+    tabs.addTab(_action_page(owner, [
+        ("Проверка скорости", "Подобрать параллельные загрузки под текущий интернет.", "_run_speed_test"),
+        ("Прокси", "Открыть вкладку соединения, где настраиваются тип, сервер, порт и пароль.", "_developer_open_connection_tab"),
+        ("Обновить доступ", "Открыть вкладку доступа для cookies/browser-профиля.", "_developer_open_access_tab"),
     ]), "Сеть")
 
-    tabs.addTab(_simple_page(owner, [
-        ("Браузер:", "Диагностика доступа к сайтам, где может потребоваться вход."),
-        ("Файл доступа:", "Ручной режим только если автоматический доступ не подходит."),
-        ("Профиль:", "Пересоздание временного профиля доступа без показа внутренних путей."),
+    tabs.addTab(_action_page(owner, [
+        ("Браузер", "Открыть настройки доступа к сайтам, где может потребоваться вход.", "_developer_open_access_tab"),
+        ("Файл доступа", "Выбрать cookies/access TXT только для ручного режима.", "_browse_cookies"),
+        ("Support TXT", "Сохранить безопасный TXT-отчёт для отправки разработчику.", "_developer_save_support_report"),
     ]), "Доступ")
 
-    tabs.addTab(_simple_page(owner, [
-        ("Кодеки:", "Проверка H.264, VP9, AV1 и доступных энкодеров."),
-        ("GPU/CPU:", "Тест видеокарты, CPU-режима и FFmpeg."),
-        ("Конвертация:", "Пробная обработка маленького файла перед большой очередью."),
+    tabs.addTab(_action_page(owner, [
+        ("Кодеки", "Обновить список доступных GPU/CPU энкодеров.", "_developer_refresh_encoders"),
+        ("Формат", "Открыть вкладку форматов и кодеков.", "_developer_open_format_tab"),
+        ("Система загрузки", "Проверить обновление системы загрузки.", "_run_update"),
     ]), "Видео")
 
-    tabs.addTab(_simple_page(owner, [
-        ("Место:", "Проверка свободного места перед большими плейлистами."),
-        ("Права:", "Проверка доступа на запись в выбранную папку."),
-        ("Временные файлы:", "Открытие и очистка временных файлов приложения."),
+    tabs.addTab(_action_page(owner, [
+        ("Папка загрузки", "Открыть текущую папку загрузки.", "_developer_open_download_folder"),
+        ("Права записи", "Проверить, что приложение может писать в выбранную папку.", "_developer_check_write_access"),
+        ("Локальные данные", "Открыть папку AppData приложения.", "_developer_open_app_data"),
     ]), "Файлы")
 
     system_page, system_layout = owner._page()
@@ -99,10 +143,10 @@ def build_developer_tab(owner) -> QWidget:
     system_layout.addWidget(update_group)
     tabs.addTab(system_page, "Эксперименты")
 
-    tabs.addTab(_simple_page(owner, [
-        ("Создать отчёт:", "Собирает версию приложения, Windows, настройки без личных данных и последние ошибки."),
-        ("Скопировать:", "Копирует текст для отправки разработчику."),
-        ("Сохранить TXT:", "Создаёт файл отчёта, который пользователь сам отправляет в поддержку."),
+    tabs.addTab(_action_page(owner, [
+        ("Создать отчёт", "Собрать версию приложения, Windows, настройки без личных данных и последние ошибки.", "_developer_show_support_report"),
+        ("Скопировать", "Скопировать текст для отправки разработчику.", "_developer_copy_support_report"),
+        ("Сохранить TXT", "Создать файл отчёта, который пользователь сам отправляет в поддержку.", "_developer_save_support_report"),
     ]), "Support-пакет")
 
     layout.addWidget(owner.developer_panel)

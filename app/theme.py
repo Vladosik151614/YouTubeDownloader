@@ -292,12 +292,40 @@ QLabel {{
 QLineEdit, QComboBox {{
     background: {p["panel"]};
     border: 1px solid {p["border"]};
+    border-radius: 6px;
     color: {p["text"]};
+    min-height: 30px;
+    padding: 5px 12px;
+    selection-background-color: {p["accent"]};
+}}
+QComboBox {{
+    padding-right: 28px;
+}}
+QComboBox:hover {{
+    border-color: {p["accent"]};
+}}
+QComboBox::drop-down {{
+    width: 26px;
+    border: none;
+    background: transparent;
+}}
+QComboBox::down-arrow {{
+    image: none;
+    width: 0px;
+    height: 0px;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 6px solid {p["muted"]};
+    margin-right: 9px;
 }}
 QComboBox QAbstractItemView {{
     background: {p["panel"]};
     color: {p["text"]};
+    border: 1px solid {p["border"]};
+    outline: none;
+    padding: 4px;
     selection-background-color: {p["accent"]};
+    selection-color: #ffffff;
 }}
 QScrollBar:horizontal {{
     background: transparent;
@@ -334,6 +362,15 @@ QPushButton#action_icon_btn:hover {{
 }}
 QPushButton#action_icon_btn:pressed {{
     background: {p["control_pressed"]};
+}}
+QFrame#developer_tool_card {{
+    background: {p["panel"]};
+    border: 1px solid {p["border"]};
+    border-radius: 7px;
+}}
+QLabel#developer_tool_title {{
+    color: {p["text"]};
+    font-weight: 700;
 }}
 """
     _QSS_CACHE[theme_name] = qss

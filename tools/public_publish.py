@@ -17,7 +17,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_REPO = "https://github.com/Vladosik151614/YouTubeDownloader.git"
 SKIP_DIRS = {".git", "build", "dist", "release", "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache"}
-SKIP_NAMES = {"owner_tools.py", "owner_diagnostics.py", "owner_release_publish.py", "settings.json", "cookies.txt"}
+SKIP_NAMES = {
+    "owner_tools.py",
+    "owner_diagnostics.py",
+    "owner_sync.py",
+    "owner_tools_shared.py",
+    "owner_release_publish.py",
+    "settings.json",
+    "cookies.txt",
+}
 SKIP_SUFFIXES = {".pyc", ".log", ".tmp", ".bak", ".exe", ".dll", ".zip"}
 
 
