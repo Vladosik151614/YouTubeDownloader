@@ -1,11 +1,7 @@
 """
 web_server.py — локальный браузерный интерфейс для YouTube Downloader.
 """
-import json
-import os
-import threading
-import uuid
-import webbrowser
+import json, os, threading, uuid, webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
@@ -195,9 +191,13 @@ def _build_opts(task_id: str, url: str, folder: str, settings: dict, collector: 
                 "best[ext=mp4]/best"
             )
 
-    if is_playlist(url) and settings.get("playlist_subfolders", True):
-        filename = "%(playlist_index)03d - %(title)s.%(ext)s" if settings.get("playlist_numbering", True) else "%(title)s.%(ext)s"
-        outtmpl = os.path.join(folder, "%(playlist_title)s", filename)
+    if is_playlist(url):
+        filename = "%(playlist_index)03d - %(title)s.%(ext)s" if settings.get("playlist_numbering", False) else "%(title)s.%(ext)s"
+        use_subfolder = settings.get("playlist_subfolders", False) and not settings.get("exact_download_folder", True)
+        if use_subfolder:
+            outtmpl = os.path.join(folder, "%(playlist_title)s", filename)
+        else:
+            outtmpl = os.path.join(folder, filename)
     else:
         outtmpl = os.path.join(folder, "%(title)s.%(ext)s")
 

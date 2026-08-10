@@ -378,7 +378,7 @@ class SettingsPage(QWidget):
             "keep_originals_sw": ("keep_originals", False),
             "show_all_codecs_sw": ("show_all_codecs", True),
             "playlist_subfolders_sw": ("playlist_subfolders", True),
-            "playlist_numbering_sw": ("playlist_numbering", True),
+            "playlist_numbering_sw": ("playlist_numbering", False),
             "skip_duplicates_sw": ("skip_duplicates", True),
             "create_m3u_sw": ("create_m3u", False),
             "embed_subtitles_sw": ("embed_subtitles", False),

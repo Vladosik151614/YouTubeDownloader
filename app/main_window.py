@@ -53,6 +53,9 @@ class MainWindow(QMainWindow):
         self._item_urls = {}     # item_id -> source URL
         self._item_paths = {}    # item_id -> downloaded file/folder
         self._item_errors = {}   # item_id -> last error
+        self._item_settings = {}  # item_id -> immutable profile snapshot
+        self._item_output_folders = {}  # item_id -> immutable selected folder
+        self._item_produced_files = {}  # item_id -> files created by this task only
         self._paused_urls = {}   # item_id -> source URL paused by user
         self._pending_downloads = []
         self._active_download_ids = set()
@@ -261,6 +264,17 @@ class MainWindow(QMainWindow):
         self.quick_codec_combo.currentIndexChanged.connect(self._on_quick_codec_changed)
         smart_row.addWidget(self._mini_combo("Кодек", self.quick_codec_combo))
 
+        numbering_card = QFrame()
+        numbering_card.setObjectName("smart_card")
+        numbering_layout = QHBoxLayout(numbering_card)
+        numbering_layout.setContentsMargins(10, 8, 10, 8)
+        self.quick_numbering_switch = ToggleSwitch(checked=self.settings.get("playlist_numbering", False))
+        self.quick_numbering_switch.setAccessibleName("Нумерация файлов плейлиста")
+        self.quick_numbering_switch.toggled.connect(self._on_quick_numbering_toggled)
+        numbering_layout.addWidget(self.quick_numbering_switch)
+        numbering_layout.addWidget(QLabel("Нумерация"))
+        smart_row.addWidget(numbering_card)
+
         smart_row.addStretch()
         tool_layout.addLayout(smart_row)
 
@@ -455,6 +469,10 @@ class MainWindow(QMainWindow):
             self.quick_codec_combo.blockSignals(True)
             self.quick_codec_combo.setCurrentIndex(codec_idx)
             self.quick_codec_combo.blockSignals(False)
+        if hasattr(self, "quick_numbering_switch"):
+            self.quick_numbering_switch.blockSignals(True)
+            self.quick_numbering_switch.setChecked(self.settings.get("playlist_numbering", False))
+            self.quick_numbering_switch.blockSignals(False)
 
     def _save_quick_setting(self, key: str, value: str):
         self.settings[key] = value
@@ -479,6 +497,13 @@ class MainWindow(QMainWindow):
         codec = {0: "original", 1: "h264", 2: "vp9", 3: "av1"}.get(index, "original")
         self.settings["default_codec"] = codec
         self.settings["auto_convert"] = codec != "original"
+        save_settings(self.settings)
+        if hasattr(self, "settings_page"):
+            self.settings_page.settings = dict(self.settings)
+            self.settings_page._load_values()
+
+    def _on_quick_numbering_toggled(self, checked: bool):
+        self.settings["playlist_numbering"] = bool(checked)
         save_settings(self.settings)
         if hasattr(self, "settings_page"):
             self.settings_page.settings = dict(self.settings)
@@ -516,9 +541,11 @@ class MainWindow(QMainWindow):
             f"Качество: {data['qualities']} · FPS: {data['fps']} · Субтитры: {data['subtitles']}"
         )
 
-    def _enqueue_url(self, url: str) -> bool:
+    def _enqueue_url(self, url: str, *, task_settings: dict | None = None, output_folder: str | None = None) -> bool:
         item_id = str(uuid.uuid4())[:8]
-        output_folder = self.settings.get("download_folder", "C:\\")
+        task_settings = dict(task_settings or self.settings)
+        output_folder = output_folder or task_settings.get("download_folder", "C:\\")
+        task_settings["download_folder"] = output_folder
         try:
             os.makedirs(output_folder, exist_ok=True)
         except Exception as e:
@@ -526,10 +553,14 @@ class MainWindow(QMainWindow):
             return False
 
         self.queue_widget.add_item(item_id, url)
+        if hasattr(self.queue_widget, "set_target_codec"):
+            self.queue_widget.set_target_codec(item_id, normalized_target_codec(task_settings))
         self._item_urls[item_id] = url
+        self._item_settings[item_id] = task_settings
+        self._item_output_folders[item_id] = output_folder
         self.status_label.setText(f"Добавлено в очередь: {url[:50]}...")
 
-        worker = DownloadWorker(item_id, url, output_folder, self.settings)
+        worker = DownloadWorker(item_id, url, output_folder, task_settings)
         worker.progress.connect(self._on_progress)
         worker.status.connect(self._on_status)
         worker.finished.connect(self._on_download_finished)
@@ -537,6 +568,8 @@ class MainWindow(QMainWindow):
         worker.thumbnail_ready.connect(self._on_thumbnail_ready)
         worker.playlist_items_ready.connect(self._on_playlist_items_ready)
         worker.playlist_item_progress.connect(self._on_playlist_item_progress)
+        if hasattr(worker, "produced_files"):
+            worker.produced_files.connect(self._on_produced_files_ready)
         self._workers[item_id] = worker
         self._pending_downloads.append(item_id)
         self._start_next_downloads()
@@ -592,7 +625,11 @@ class MainWindow(QMainWindow):
         if not url:
             QMessageBox.warning(self, "Продолжить", "Не найдена ссылка для продолжения.")
             return
-        self._enqueue_url(url)
+        self._enqueue_url(
+            url,
+            task_settings=self._item_settings.get(item_id),
+            output_folder=self._item_output_folders.get(item_id),
+        )
 
     def _change_folder(self):
         folder = QFileDialog.getExistingDirectory(
@@ -641,7 +678,11 @@ class MainWindow(QMainWindow):
         if not url:
             QMessageBox.warning(self, "Повтор", "Не найдена ссылка для повтора.")
             return
-        self._enqueue_url(url)
+        self._enqueue_url(
+            url,
+            task_settings=self._item_settings.get(item_id),
+            output_folder=self._item_output_folders.get(item_id),
+        )
 
     def _show_item_details(self, item_id: str):
         url = self._item_urls.get(item_id, "")
@@ -671,6 +712,11 @@ class MainWindow(QMainWindow):
     def _on_playlist_item_progress(self, item_id: str, playlist_index: int, status: str, percent: float):
         self.queue_widget.update_playlist_item(item_id, playlist_index, status, percent)
 
+    def _on_produced_files_ready(self, item_id: str, files: list):
+        self._item_produced_files[item_id] = [
+            os.path.abspath(path) for path in files if path and os.path.isfile(path)
+        ]
+
     def _on_download_finished(self, item_id: str, filepath: str, success: bool, error_msg: str):
         self._workers.pop(item_id, None)
         self._active_download_ids.discard(item_id)
@@ -689,6 +735,13 @@ class MainWindow(QMainWindow):
             self.history_page.refresh()
         
         if success:
+            produced_files = list(self._item_produced_files.get(item_id, []))
+            task_settings = dict(self._item_settings.get(item_id, self.settings))
+            if not produced_files and filepath and os.path.isfile(filepath):
+                produced_files = [filepath]
+            actual_size = sum(os.path.getsize(path) for path in produced_files if os.path.isfile(path))
+            if actual_size and hasattr(self.queue_widget, "update_size_bytes"):
+                self.queue_widget.update_size_bytes(item_id, actual_size)
             self.queue_widget.update_status(item_id, "Завершено")
             self.status_label.setText(f"Загрузка завершена: {os.path.basename(filepath or 'файл')}")
             logger.info(f"[{item_id}] Done: {filepath}")
@@ -696,19 +749,13 @@ class MainWindow(QMainWindow):
             if self.settings.get("notify_download_finished", True):
                 self._notify("Загрузка завершена", os.path.basename(filepath or "Файл сохранен"))
             
-            if self.settings.get("auto_convert", True) is True:
-                if filepath and os.path.isfile(filepath):
-                    self._check_and_prompt_conversion([filepath], is_playlist=False)
-                elif filepath and os.path.isdir(filepath):
-                    video_files = []
-                    for root, _, names in os.walk(filepath):
-                        video_files.extend(
-                            os.path.join(root, f)
-                            for f in names
-                            if f.lower().endswith((".mp4", ".mkv", ".webm"))
-                        )
-                    if video_files:
-                        self._check_and_prompt_conversion(video_files, is_playlist=True)
+            if task_settings.get("auto_convert", True) is True:
+                video_files = [
+                    path for path in produced_files
+                    if path.lower().endswith((".mp4", ".mkv", ".webm"))
+                ]
+                if video_files:
+                    self._check_and_prompt_conversion(video_files, is_playlist=len(video_files) > 1, settings=task_settings, item_id=item_id)
             else:
                 logger.info(f"Auto-convert is DISABLED by user toggle switch for [{item_id}]")
             if self.settings.get("remove_finished_from_list", False):
@@ -725,9 +772,10 @@ class MainWindow(QMainWindow):
                 SupportErrorDialog(self, url, filepath or "", error_msg, self.settings).exec()
         self._start_next_downloads()
 
-    def _check_and_prompt_conversion(self, filepaths: list, is_playlist: bool = False):
-        target_codec = normalized_target_codec(self.settings)
-        if target_codec == "original" or not self.settings.get("auto_convert", False):
+    def _check_and_prompt_conversion(self, filepaths: list, is_playlist: bool = False, *, settings: dict | None = None, item_id: str = ""):
+        settings = dict(settings or self.settings)
+        target_codec = normalized_target_codec(settings)
+        if target_codec == "original" or not settings.get("auto_convert", False):
             return
         needs_conversion = [
             f for f in filepaths
@@ -738,7 +786,7 @@ class MainWindow(QMainWindow):
 
         codec_label = target_codec.upper() if target_codec != "h264" else "H.264"
         should_convert = True
-        if self.settings.get("ask_before_codec_convert", True):
+        if settings.get("ask_before_codec_convert", True):
             if is_playlist:
                 msg = (
                     f"Плейлист скачан. Найдено файлов для смены кодека: {len(needs_conversion)}.\n\n"
@@ -761,7 +809,7 @@ class MainWindow(QMainWindow):
             should_convert = reply == QMessageBox.StandardButton.Yes
         if should_convert:
             for fp in needs_conversion:
-                self._start_conversion(fp)
+                self._start_conversion(fp, settings=settings, source_item_id=item_id)
 
     def _legacy_check_and_prompt_conversion(self, filepaths: list):
         non_h264 = [
@@ -784,24 +832,36 @@ class MainWindow(QMainWindow):
             for fp in non_h264:
                 self._start_conversion(fp)
 
-    def _start_conversion(self, filepath: str):
+    def _start_conversion(self, filepath: str, *, settings: dict | None = None, source_item_id: str = ""):
+        settings = dict(settings or self.settings)
         fake_id = "conv_" + str(uuid.uuid4())[:6]
         self.queue_widget.add_item(fake_id, os.path.basename(filepath))
-        self.queue_widget.update_status(fake_id, "Конвертация (NVIDIA GPU)...")
+        target_codec = normalized_target_codec(settings)
+        codec_label = "H.264" if target_codec == "h264" else target_codec.upper()
+        self.queue_widget.update_status(fake_id, f"Перекодирование в {codec_label}...")
+        if hasattr(self.queue_widget, "set_target_codec"):
+            self.queue_widget.set_target_codec(fake_id, target_codec)
 
-        worker = ConvertWorker(filepath, self.settings)
+        worker = ConvertWorker(filepath, settings)
         worker.progress.connect(lambda fp, pct, fid=fake_id: self.queue_widget.update_progress(fid, pct, "—", "—"))
-        worker.finished.connect(lambda fp, out, ok, err, fid=fake_id: self._on_conv_finished(fid, fp, out, ok, err))
+        worker.finished.connect(lambda fp, out, ok, err, fid=fake_id, sid=source_item_id: self._on_conv_finished(fid, fp, out, ok, err, sid))
         self._conv_workers[filepath] = worker
         worker.start()
         logger.info(f"Started GPU conversion: {filepath}")
 
-    def _on_conv_finished(self, fake_id: str, filepath: str, out_path: str, success: bool, error: str):
+    def _on_conv_finished(self, fake_id: str, filepath: str, out_path: str, success: bool, error: str, source_item_id: str = ""):
         self._item_paths[fake_id] = out_path or filepath or ""
         self._item_errors[fake_id] = error or ""
         self.queue_widget.set_result(fake_id, out_path or filepath or "", error or "")
         self.queue_widget.set_finished(fake_id, success)
         if success:
+            actual_codec = probe_codec(out_path) if out_path else "unknown"
+            if hasattr(self.queue_widget, "set_final_codec"):
+                self.queue_widget.set_final_codec(fake_id, actual_codec)
+                if source_item_id:
+                    self.queue_widget.set_final_codec(source_item_id, actual_codec)
+            if out_path and os.path.isfile(out_path) and hasattr(self.queue_widget, "update_size_bytes"):
+                self.queue_widget.update_size_bytes(fake_id, os.path.getsize(out_path))
             self.queue_widget.update_status(fake_id, "Завершено")
             self.status_label.setText(f"Конвертация завершена: {os.path.basename(out_path)}")
             self._update_disk_space()

@@ -1,10 +1,5 @@
-"""
-downloader.py — загрузка видео/плейлистов через yt-dlp в отдельном QThread
-с защитой от сбоев (пропуск недоступных/приватных/удаленных видео в плейлистах).
-"""
-import os
-import re
-import yt_dlp
+"""Загрузка видео и плейлистов через yt-dlp в отдельном QThread."""
+import os, time, yt_dlp
 from PySide6.QtCore import QThread, Signal
 from app.logger import logger
 from app.binary_manager import get_binary_path
@@ -14,6 +9,8 @@ from app.download_utils import (
     format_bytes,
     is_playlist,
     playlist_entry_rows,
+    media_size_bytes,
+    remove_merged_audio_sidecars,
     rate_limit_bytes,
     set_sleep_prevention,
     thumbnail_url,
@@ -22,8 +19,7 @@ from app.path_manager import service_output_folder
 from app.proxy_config import proxy_url_from_settings
 from app.settings_manager import APP_DATA_DIR
 from app.spotify_engine import is_spotify_url, run_spotify_download
-
-
+from app.error_messages import classify_download_error
 class DownloadWorker(QThread):
     progress = Signal(str, float, str, str)
     status = Signal(str, str)
@@ -32,17 +28,27 @@ class DownloadWorker(QThread):
     thumbnail_ready = Signal(str, str)
     playlist_items_ready = Signal(str, list)
     playlist_item_progress = Signal(str, int, str, float)
+    produced_files = Signal(str, list)
 
     def __init__(self, item_id: str, url: str, output_folder: str, settings: dict, parent=None):
         super().__init__(parent)
         self.item_id = item_id
         self.url = url
-        self.output_folder = output_folder
-        self.settings = settings
+        self.base_output_folder = os.path.abspath(output_folder)
+        self.settings = dict(settings)
+        download_type = "audio" if is_spotify_url(url) else self.settings.get("download_type", "video")
+        self.output_folder = (
+            service_output_folder(self.base_output_folder, self.url, download_type)
+            if self.settings.get("auto_route_folders", False) and not self.settings.get("exact_download_folder", True)
+            else self.base_output_folder
+        )
         self._cancelled = False
         self._ydl_logger = YtDlpLogCollector(item_id)
         self._auth_retry_used = False
         self._spotify_process = None
+        self._last_progress_time = None
+        self._last_downloaded = 0
+        self._ema_speed = None
 
     def cancel(self):
         self._cancelled = True
@@ -70,9 +76,30 @@ class DownloadWorker(QThread):
         if status == "downloading":
             total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
             downloaded = d.get("downloaded_bytes", 0)
+            if downloaded < self._last_downloaded:
+                self._last_progress_time = None
+                self._last_downloaded = 0
+                self._ema_speed = None
             percent = (downloaded / total * 100) if total > 0 else 0
-            speed = d.get("_speed_str", "—")
-            eta = d.get("_eta_str", "—")
+            numeric_speed = d.get("speed")
+            now = time.monotonic()
+            if not numeric_speed and self._last_progress_time is not None and downloaded >= self._last_downloaded:
+                elapsed = now - self._last_progress_time
+                if elapsed > 0:
+                    numeric_speed = (downloaded - self._last_downloaded) / elapsed
+            if numeric_speed and numeric_speed > 0:
+                alpha = 0.25
+                self._ema_speed = numeric_speed if self._ema_speed is None else alpha * numeric_speed + (1 - alpha) * self._ema_speed
+            self._last_progress_time = now
+            self._last_downloaded = downloaded
+            speed = format_bytes(int(self._ema_speed)) + "/s" if self._ema_speed else d.get("_speed_str", "—")
+            remaining = max(0, total - downloaded)
+            eta_seconds = int(remaining / self._ema_speed) if total and self._ema_speed else d.get("eta")
+            if isinstance(eta_seconds, (int, float)):
+                eta_seconds = int(eta_seconds)
+                eta = f"{eta_seconds // 60:02d}:{eta_seconds % 60:02d}"
+            else:
+                eta = d.get("_eta_str", "—")
             self.progress.emit(self.item_id, percent, speed, eta)
             if isinstance(playlist_index, int):
                 self.playlist_item_progress.emit(self.item_id, playlist_index, "Загрузка...", percent)
@@ -88,9 +115,7 @@ class DownloadWorker(QThread):
         quality = str(self.settings.get("download_quality", "1080"))
         fps = str(self.settings.get("fps_limit", "best"))
         download_type = self.settings.get("download_type", "video")
-        if self.settings.get("auto_route_folders", True):
-            self.output_folder = service_output_folder(self.output_folder, self.url, download_type)
-            os.makedirs(self.output_folder, exist_ok=True)
+        os.makedirs(self.output_folder, exist_ok=True)
         if download_type == "audio":
             fmt = "bestaudio/best"
         elif download_type in {"pictures", "documents"}:
@@ -112,9 +137,12 @@ class DownloadWorker(QThread):
                     f"bestvideo{media_filter}+bestaudio/"
                     "best[ext=mp4]/best"
                 )
-        if is_playlist(self.url) and self.settings.get("playlist_subfolders", True):
-            filename = "%(playlist_index)03d - %(title)s.%(ext)s" if self.settings.get("playlist_numbering", True) else "%(title)s.%(ext)s"
-            outtmpl = os.path.join(self.output_folder, "%(playlist_title)s", filename)
+        if is_playlist(self.url):
+            filename = "%(playlist_index)03d - %(title)s.%(ext)s" if self.settings.get("playlist_numbering", False) else "%(title)s.%(ext)s"
+            if self.settings.get("playlist_subfolders", False) and not self.settings.get("exact_download_folder", True):
+                outtmpl = os.path.join(self.output_folder, "%(playlist_title)s", filename)
+            else:
+                outtmpl = os.path.join(self.output_folder, filename)
         else:
             outtmpl = os.path.join(self.output_folder, "%(title)s.%(ext)s")
         opts = {
@@ -123,6 +151,7 @@ class DownloadWorker(QThread):
             "progress_hooks": [self._progress_hook],
             "logger": self._ydl_logger,
             "merge_output_format": container,
+            "keepvideo": False,
             "skip_download": download_type in {"pictures", "documents"},
             "noplaylist": False,
             "ignoreerrors": True,
@@ -222,31 +251,8 @@ class DownloadWorker(QThread):
             logger.warning(f"[{self.item_id}] Could not create M3U: {e}")
 
     def _friendly_error(self, raw_message: str) -> str:
-        all_messages = " ".join([raw_message] + self._ydl_logger.messages)
-        text = all_messages.lower()
-
-        if "could not copy chrome cookie database" in text or (
-            "permission denied" in text and "network\\cookies" in text
-        ):
-            return (
-                "Не удалось прочитать cookies Chrome. Приложение больше не использует Chrome "
-                "автоматически: очистите выбор браузера в настройках или укажите свежий cookies.txt."
-            )
-
-        if "sign in to confirm" in text or "not a bot" in text:
-            return (
-                "YouTube просит подтвердить, что это не бот. Приложение уже пробует IPv4; "
-                "если ошибка повторится, нужен свежий cookies.txt, потому что прямое чтение Chrome "
-                "на этой машине может не работать."
-            )
-
-        if "failed to load cookies" in text or "failed to decrypt" in text:
-            return (
-                "Не удалось загрузить cookies браузера. Уберите Chrome из настроек cookies "
-                "или выберите свежий cookies.txt."
-            )
-
-        return raw_message
+        combined = " ".join([str(raw_message)] + self._ydl_logger.messages)
+        return classify_download_error(combined).user_text()
 
     def _looks_like_auth_error(self, message: str) -> bool:
         text = " ".join([message] + self._ydl_logger.messages).lower()
@@ -358,13 +364,7 @@ class DownloadWorker(QThread):
             if pl and count == 0:
                 raise RuntimeError(self._friendly_error("Плейлист найден, но доступных видео в нём нет"))
 
-            total_size = 0
-            if pl and not fast_playlist:
-                for entry in entries:
-                    if entry:
-                        total_size += entry.get("filesize") or entry.get("filesize_approx") or 0
-            else:
-                total_size = info.get("filesize") or info.get("filesize_approx") or 0
+            total_size = sum(media_size_bytes(entry) for entry in entries) if pl else media_size_bytes(info)
 
             size_str = format_bytes(total_size)
             self.info_ready.emit(self.item_id, title, pl, count, size_str)
@@ -397,7 +397,7 @@ class DownloadWorker(QThread):
             )
             
             if pl:
-                new_files = self._new_media_files(files_before)
+                new_files = remove_merged_audio_sidecars(self._new_media_files(files_before), self.settings.get("download_type", "video"))
                 if download_error and not new_files:
                     if self._refresh_cookies_and_retry(download_error):
                         self._download()
@@ -410,9 +410,10 @@ class DownloadWorker(QThread):
                     )
                 if self.settings.get("create_m3u", False):
                     self._write_m3u(new_files, title)
+                self.produced_files.emit(self.item_id, new_files)
                 filepath = self.output_folder
             else:
-                generated_files = self._new_media_files(files_before)
+                generated_files = remove_merged_audio_sidecars(self._new_media_files(files_before), self.settings.get("download_type", "video"))
                 filepath = generated_files[0] if self.settings.get("download_type") in {"pictures", "documents"} and generated_files else self._single_output_path(ydl, info)
                 if download_error:
                     if self._refresh_cookies_and_retry(download_error):
@@ -421,6 +422,7 @@ class DownloadWorker(QThread):
                     raise RuntimeError(self._friendly_error(f"Не удалось загрузить видео: {download_error}"))
                 if not os.path.isfile(filepath):
                     raise RuntimeError(self._friendly_error("Загрузка закончилась без готового файла"))
+                self.produced_files.emit(self.item_id, [filepath])
             
             logger.info(f"[{self.item_id}] Download process finished: {filepath}")
             self.status.emit(self.item_id, "Завершено")
@@ -428,8 +430,6 @@ class DownloadWorker(QThread):
 
     def _download_spotify(self):
         download_type = "audio"
-        if self.settings.get("auto_route_folders", True):
-            self.output_folder = service_output_folder(self.output_folder, self.url, download_type)
         os.makedirs(self.output_folder, exist_ok=True)
         logger.info(f"[{self.item_id}] Spotify download started: folder={self.output_folder}")
         self.info_ready.emit(self.item_id, "Spotify music", True, 0, "—")
@@ -443,6 +443,7 @@ class DownloadWorker(QThread):
             self.finished.emit(self.item_id, "", False, "Spotify загрузка закончилась без готовых аудиофайлов.")
             return
         logger.info(f"[{self.item_id}] Spotify download finished: files={len(files)}")
+        self.produced_files.emit(self.item_id, list(files))
         self.progress.emit(self.item_id, 100.0, "—", "—")
         self.status.emit(self.item_id, "Завершено")
         self.finished.emit(self.item_id, files[0] if len(files) == 1 else self.output_folder, True, "")

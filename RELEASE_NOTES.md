@@ -1,5 +1,26 @@
 # Release Notes
 
+## 0.1.4
+
+Release date: August 10, 2026. Release time: `2026-08-10 22:42:39 +02:00` (Europe/Berlin).
+
+Implemented; packaged-release verification is still pending:
+
+- Reworked download failures into user-oriented explanations and suggested actions, including HTTP 403 responses.
+- Kept the selected output folder on each queued task so changing the folder for a new link does not redirect an active video or playlist.
+- Replaced the queue ETA field with the selected codec and carried the codec choice with the task.
+- Applied selected codec conversion after download; source deletion is allowed only after successful conversion and when keeping originals is disabled.
+- Added an on/off playlist-numbering control. It is off by default, so new files have no `001 -`, `002 -` or similar prefix unless the user enables it.
+- Removed only merged yt-dlp `.m4a` format sidecars after the final video exists; standalone audio downloads are preserved.
+- Updated application, support-report, updater, installer and owner workflow version metadata to `0.1.4`.
+
+Packaging safeguards:
+
+- Release publishing now requires Inno Setup and stops instead of disguising a portable executable as an installer.
+- GitHub Release notes are limited to this version's section.
+
+Publication timestamp: `2026-08-10 22:42:39 +02:00` (Europe/Berlin).
+
 ## 0.1.3
 
 Bug-fix release for July 29, 2026.

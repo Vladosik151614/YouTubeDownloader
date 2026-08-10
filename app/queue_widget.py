@@ -1,6 +1,4 @@
-"""
-queue_widget.py — виджет очереди загрузок с поддержкой отображения размера видео/плейлиста
-"""
+"""Очередь загрузок с размерами, кодеками и раскрываемыми плейлистами."""
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
     QProgressBar, QLabel, QPushButton, QHeaderView, QAbstractItemView
@@ -9,6 +7,7 @@ from PySide6.QtCore import QSize, Qt, Signal, QUrl
 from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest
 from app.icon_button import ActionIconButton
+from app.download_utils import format_bytes
 from app.logger import logger
 
 
@@ -43,7 +42,7 @@ STATUS_COLORS = {
     "Проверено":              "#4caf50",
 }
 
-COLUMNS = ["#", "Название", "Размер", "Статус", "Прогресс", "Скорость", "ETA", "Действия"]
+COLUMNS = ["#", "Название", "Размер", "Статус", "Прогресс", "Скорость", "Кодек", "Действия"]
 THUMBNAIL_SIZE = QSize(64, 36)
 
 
@@ -65,6 +64,8 @@ class QueueWidget(QWidget):
         self._playlist_child_rows = {}  # (item_id, playlist_index) -> row
         self._thumb_requests = {}  # reply -> (item_id, playlist_index | None)
         self._thumb_cache = {}  # thumbnail url -> fixed-size pixmap
+        self._finished = {}  # item_id -> success
+        self._codecs = {}  # item_id -> target/final codec label
         self._setup_ui()
 
     def _setup_ui(self):
@@ -82,7 +83,7 @@ class QueueWidget(QWidget):
         self.table.setColumnWidth(2, 72)   # Размер
         self.table.setColumnWidth(3, 108)  # Статус
         self.table.setColumnWidth(5, 78)   # Скорость
-        self.table.setColumnWidth(6, 52)   # ETA
+        self.table.setColumnWidth(6, 72)   # Кодек
         self.table.setColumnWidth(7, 132)  # Действия
 
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -101,9 +102,8 @@ class QueueWidget(QWidget):
         self._thumb_manager.finished.connect(self._on_thumbnail_loaded)
 
     def add_item(self, item_id: str, url: str) -> int:
-        row = self.table.rowCount()
+        row = 0
         self.table.insertRow(row)
-        self._items[item_id] = row
 
         num_item = QTableWidgetItem(str(row + 1))
         num_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -130,6 +130,7 @@ class QueueWidget(QWidget):
         self.table.setCellWidget(row, 7, self._action_widget(item_id))
 
         self.table.setRowHeight(row, 46)
+        self._reindex_rows()
         return row
 
     def _action_widget(self, item_id: str, paused: bool = False) -> QWidget:
@@ -143,7 +144,22 @@ class QueueWidget(QWidget):
             expand_btn = ActionIconButton(action, tip)
             expand_btn.clicked.connect(lambda _, iid=item_id: self.toggle_playlist(iid))
             btn_layout.addWidget(expand_btn)
-        if paused:
+        if item_id in self._finished:
+            if self._finished[item_id]:
+                open_btn = ActionIconButton("folder", "Открыть папку")
+                open_btn.clicked.connect(lambda _, iid=item_id: self.open_requested.emit(iid))
+                btn_layout.addWidget(open_btn)
+                mark = QLabel("✓")
+                mark.setStyleSheet("color: #4caf50; font-weight: bold;")
+                btn_layout.addWidget(mark)
+            else:
+                retry_btn = ActionIconButton("retry", "Повторить")
+                retry_btn.clicked.connect(lambda _, iid=item_id: self.retry_requested.emit(iid))
+                details_btn = ActionIconButton("details", "Показать ошибку")
+                details_btn.clicked.connect(lambda _, iid=item_id: self.details_requested.emit(iid))
+                btn_layout.addWidget(retry_btn)
+                btn_layout.addWidget(details_btn)
+        elif paused:
             resume_btn = ActionIconButton("resume", "Продолжить")
             resume_btn.clicked.connect(lambda _, iid=item_id: self.resume_requested.emit(iid))
             btn_layout.addWidget(resume_btn)
@@ -151,9 +167,10 @@ class QueueWidget(QWidget):
             pause_btn = ActionIconButton("pause", "Пауза")
             pause_btn.clicked.connect(lambda _, iid=item_id: self.pause_requested.emit(iid))
             btn_layout.addWidget(pause_btn)
-        cancel_btn = ActionIconButton("cancel", "Отменить")
-        cancel_btn.clicked.connect(lambda _, iid=item_id: self.cancel_requested.emit(iid))
-        btn_layout.addWidget(cancel_btn)
+        if item_id not in self._finished:
+            cancel_btn = ActionIconButton("cancel", "Отменить")
+            cancel_btn.clicked.connect(lambda _, iid=item_id: self.cancel_requested.emit(iid))
+            btn_layout.addWidget(cancel_btn)
         btn_layout.addStretch()
         return btn_widget
 
@@ -170,6 +187,14 @@ class QueueWidget(QWidget):
         size_item = self.table.item(row, 2)
         if size_item:
             size_item.setText(size_str)
+
+    def update_size_bytes(self, item_id: str, size_bytes: int):
+        row = self._items.get(item_id)
+        if row is None:
+            return
+        size_item = self.table.item(row, 2)
+        if size_item:
+            size_item.setText(format_bytes(size_bytes))
 
     def set_item_thumbnail(self, item_id: str, thumbnail: str):
         self._request_thumbnail(item_id, None, thumbnail)
@@ -188,9 +213,12 @@ class QueueWidget(QWidget):
                 "title": entry.get("title") or f"Видео {index}",
                 "url": entry.get("url", ""),
                 "thumbnail": entry.get("thumbnail", ""),
+                "size": entry.get("size") or "—",
+                "codec": entry.get("codec") or self._codecs.get(item_id, "—"),
                 "status": "Ожидание",
                 "percent": 0.0,
             })
+        normalized.sort(key=lambda entry: entry["index"])
         self._playlist_entries[item_id] = normalized
         self._set_playlist_parent_text(item_id)
         self._load_playlist_thumbnail(item_id)
@@ -220,6 +248,7 @@ class QueueWidget(QWidget):
 
     def _request_thumbnail(self, item_id: str, playlist_index: int | None, thumbnail: str):
         if not thumbnail:
+            self._apply_thumbnail(item_id, playlist_index, self._placeholder_thumbnail())
             return
         if thumbnail in self._thumb_cache:
             self._apply_thumbnail(item_id, playlist_index, self._thumb_cache[thumbnail])
@@ -236,12 +265,16 @@ class QueueWidget(QWidget):
             return
         if reply.error():
             logger.warning(f"Thumbnail load failed: {reply.errorString()}")
+            item_id, playlist_index, _ = target
+            self._apply_thumbnail(item_id, playlist_index, self._placeholder_thumbnail())
             reply.deleteLater()
             return
         pixmap = QPixmap()
         pixmap.loadFromData(reply.readAll())
         reply.deleteLater()
         if pixmap.isNull():
+            item_id, playlist_index, _ = target
+            self._apply_thumbnail(item_id, playlist_index, self._placeholder_thumbnail())
             return
         item_id, playlist_index, thumbnail = target
         fixed = self._thumbnail_icon(pixmap)
@@ -268,6 +301,14 @@ class QueueWidget(QWidget):
         painter.drawPixmap(x, y, scaled)
         painter.end()
         return canvas
+
+    def _placeholder_thumbnail(self) -> QPixmap:
+        cache_key = "__placeholder__"
+        if cache_key not in self._thumb_cache:
+            canvas = QPixmap(THUMBNAIL_SIZE)
+            canvas.fill(QColor("#30343b"))
+            self._thumb_cache[cache_key] = canvas
+        return self._thumb_cache[cache_key]
 
     def toggle_playlist(self, item_id: str):
         if item_id not in self._playlist_entries:
@@ -301,8 +342,7 @@ class QueueWidget(QWidget):
             title_item.setToolTip(title)
             title_item.setForeground(QColor("#bdbdbd"))
             self.table.setItem(row, 1, title_item)
-            self._request_thumbnail(item_id, entry["index"], entry.get("thumbnail", ""))
-            self.table.setItem(row, 2, QTableWidgetItem("—"))
+            self.table.setItem(row, 2, QTableWidgetItem(entry.get("size", "—")))
             status_item = QTableWidgetItem(entry.get("status", "Ожидание"))
             status_item.setForeground(QColor(STATUS_COLORS.get(entry.get("status", ""), "#888888")))
             self.table.setItem(row, 3, status_item)
@@ -310,10 +350,12 @@ class QueueWidget(QWidget):
             progress_widget.set_value(float(entry.get("percent", 0.0)))
             self.table.setCellWidget(row, 4, progress_widget)
             self.table.setItem(row, 5, QTableWidgetItem("—"))
-            self.table.setItem(row, 6, QTableWidgetItem("—"))
+            self.table.setItem(row, 6, QTableWidgetItem(entry.get("codec", self._codecs.get(item_id, "—"))))
             self.table.setCellWidget(row, 7, QWidget())
             self.table.setRowHeight(row, 40)
         self._reindex_rows()
+        for entry in self._playlist_entries.get(item_id, []):
+            self._request_thumbnail(item_id, entry["index"], entry.get("thumbnail", ""))
         self.table.viewport().update()
 
     def _remove_playlist_children(self, item_id: str):
@@ -394,9 +436,46 @@ class QueueWidget(QWidget):
         speed_item = self.table.item(row, 5)
         if speed_item:
             speed_item.setText(speed)
-        eta_item = self.table.item(row, 6)
-        if eta_item:
-            eta_item.setText(eta)
+
+    def set_target_codec(self, item_id: str, codec: str):
+        label = self._codec_label(codec)
+        self._codecs[item_id] = label
+        row = self._items.get(item_id)
+        if row is not None and self.table.item(row, 6):
+            self.table.item(row, 6).setText(label)
+        for entry in self._playlist_entries.get(item_id, []):
+            if not entry.get("final_codec"):
+                entry["codec"] = label
+                child_row = self._playlist_child_rows.get((item_id, entry["index"]))
+                if child_row is not None and self.table.item(child_row, 6):
+                    self.table.item(child_row, 6).setText(label)
+
+    def set_final_codec(self, item_id: str, codec: str, playlist_index: int | None = None):
+        label = self._codec_label(codec)
+        if playlist_index is None:
+            self._codecs[item_id] = label
+            row = self._items.get(item_id)
+        else:
+            row = self._playlist_child_rows.get((item_id, playlist_index))
+            for entry in self._playlist_entries.get(item_id, []):
+                if entry["index"] == playlist_index:
+                    entry["codec"] = label
+                    entry["final_codec"] = True
+                    break
+        if row is not None and self.table.item(row, 6):
+            self.table.item(row, 6).setText(label)
+
+    def set_item_codec(self, item_id: str, codec: str, playlist_index: int | None = None, final: bool = False):
+        """Compatibility API for callers that set a queue item's codec directly."""
+        if final:
+            self.set_final_codec(item_id, codec, playlist_index)
+        else:
+            self.set_target_codec(item_id, codec)
+
+    @staticmethod
+    def _codec_label(codec: str) -> str:
+        value = str(codec or "original").strip().lower()
+        return {"original": "Оригинал", "h264": "H.264", "avc1": "H.264", "hevc": "H.265", "h265": "H.265", "vp9": "VP9", "av1": "AV1"}.get(value, value.upper() or "—")
 
     def set_finished(self, item_id: str, success: bool):
         row = self._items.get(item_id)
@@ -411,31 +490,8 @@ class QueueWidget(QWidget):
         pw = self.table.cellWidget(row, 4)
         if pw and success:
             pw.set_value(100)
-        self.table.removeCellWidget(row, 7)
-        self.table.takeItem(row, 7)
-        btn_widget = QWidget()
-        btn_layout = QHBoxLayout(btn_widget)
-        btn_layout.setContentsMargins(4, 2, 4, 2)
-        btn_layout.setSpacing(4)
-
-        if success:
-            open_btn = ActionIconButton("folder", "Открыть папку")
-            open_btn.clicked.connect(lambda _, iid=item_id: self.open_requested.emit(iid))
-            btn_layout.addWidget(open_btn)
-            mark = QLabel("✓")
-            mark.setStyleSheet("color: #4caf50; font-weight: bold;")
-            mark.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            btn_layout.addWidget(mark)
-        else:
-            retry_btn = ActionIconButton("retry", "Повторить")
-            retry_btn.clicked.connect(lambda _, iid=item_id: self.retry_requested.emit(iid))
-            details_btn = ActionIconButton("details", "Показать ошибку")
-            details_btn.clicked.connect(lambda _, iid=item_id: self.details_requested.emit(iid))
-            btn_layout.addWidget(retry_btn)
-            btn_layout.addWidget(details_btn)
-
-        btn_layout.addStretch()
-        self.table.setCellWidget(row, 7, btn_widget)
+        self._finished[item_id] = success
+        self.table.setCellWidget(row, 7, self._action_widget(item_id))
 
     def set_result(self, item_id: str, filepath: str = "", error_msg: str = ""):
         if filepath:
@@ -470,6 +526,8 @@ class QueueWidget(QWidget):
             self._errors.pop(item_id, None)
             self._playlist_entries.pop(item_id, None)
             self._playlist_expanded.discard(item_id)
+            self._finished.pop(item_id, None)
+            self._codecs.pop(item_id, None)
             self.table.removeRow(row)
         self._reindex_rows()
 
@@ -484,5 +542,7 @@ class QueueWidget(QWidget):
         self._errors.pop(item_id, None)
         self._playlist_entries.pop(item_id, None)
         self._playlist_expanded.discard(item_id)
+        self._finished.pop(item_id, None)
+        self._codecs.pop(item_id, None)
         self.table.removeRow(row)
         self._reindex_rows()

@@ -41,15 +41,51 @@ def rate_limit_bytes(value: str) -> int | None:
 
 
 def _best_thumbnail(thumbnail: str, thumbnails: list[dict]) -> str:
-    if thumbnail:
-        return str(thumbnail)
-    usable = [
-        t for t in thumbnails
-        if str((t or {}).get("url", "")).lower().split("?", 1)[0].endswith((".jpg", ".jpeg", ".png"))
-    ]
-    chosen = usable[-1] if usable else (thumbnails[-1] if thumbnails else {})
+    if str(thumbnail or "").strip():
+        return str(thumbnail).strip()
+    usable = [t for t in (thumbnails or []) if str((t or {}).get("url", "")).strip()]
+    chosen = max(
+        usable,
+        key=lambda t: (
+            int((t or {}).get("preference") or 0),
+            int((t or {}).get("width") or 0) * int((t or {}).get("height") or 0),
+        ),
+        default={},
+    )
     return str((chosen or {}).get("url", ""))
 
+
+def media_size_bytes(info: dict) -> int:
+    """Return the best available size estimate for a selected media item."""
+    def positive_int(value) -> int:
+        try:
+            return max(0, int(float(value or 0)))
+        except (TypeError, ValueError, OverflowError):
+            return 0
+
+    direct = positive_int(info.get("filesize") or info.get("filesize_approx"))
+    if direct:
+        return direct
+    requested = info.get("requested_formats") or []
+    return sum(positive_int(part.get("filesize") or part.get("filesize_approx")) for part in requested if part)
+
+
+def remove_merged_audio_sidecars(files: list[str], download_type: str = "video") -> list[str]:
+    """Remove only yt-dlp format sidecars after a merged video exists."""
+    if download_type != "video":
+        return files
+    media = set(files)
+    for path in list(media):
+        if not path.lower().endswith(".m4a"):
+            continue
+        stem = re.sub(r"\.f\d+$", "", os.path.splitext(path)[0], flags=re.IGNORECASE)
+        if any(os.path.isfile(stem + ext) for ext in (".mp4", ".mkv", ".webm")):
+            try:
+                os.remove(path)
+                media.discard(path)
+            except OSError as exc:
+                logger.warning(f"Could not remove merged audio sidecar {path}: {exc}")
+    return sorted(media)
 
 def playlist_entry_rows(entries: list[dict]) -> list[dict]:
     rows = []
@@ -62,11 +98,14 @@ def playlist_entry_rows(entries: list[dict]) -> list[dict]:
         thumbnail = entry.get("thumbnail") or ""
         thumbnails = entry.get("thumbnails") or []
         thumbnail = _best_thumbnail(thumbnail, thumbnails)
+        size_bytes = media_size_bytes(entry)
         rows.append({
             "index": int(index),
             "title": str(title),
             "url": str(url),
             "thumbnail": str(thumbnail),
+            "size_bytes": size_bytes,
+            "size": format_bytes(size_bytes),
         })
     return rows
 

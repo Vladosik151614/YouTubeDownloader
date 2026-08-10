@@ -29,6 +29,7 @@ def _legacy_settings_files() -> list[str]:
 
 DEFAULTS = {
     "download_folder": _default_download_folder(),
+    "exact_download_folder": True,
     "download_type": "video",
     "download_quality": "1080",
     "fps_limit": "60",
@@ -49,9 +50,9 @@ DEFAULTS = {
     "background_on_close": False,
     "launch_on_startup": False,
     "language": "en",
-    "playlist_subfolders": True,
-    "playlist_numbering": True,
-    "auto_route_folders": True,
+    "playlist_subfolders": False,
+    "playlist_numbering": False,
+    "auto_route_folders": False,
     "skip_duplicates": True,
     "create_m3u": False,
     "embed_subtitles": False,

@@ -38,7 +38,7 @@ def is_spotify_url(url: str) -> bool:
     return "open.spotify.com" in url.lower() or "spotify.com" in url.lower()
 
 
-def spotify_output_template(folder: str, playlist_numbering: bool = True) -> str:
+def spotify_output_template(folder: str, playlist_numbering: bool = False) -> str:
     filename = "{list-position} - {artists} - {title}.{output-ext}" if playlist_numbering else "{artists} - {title}.{output-ext}"
     return str(Path(folder) / "{list-name}" / filename)
 
@@ -62,7 +62,7 @@ def spotify_command(url: str, folder: str, settings: dict) -> list[str]:
         command = [sys.executable, str(Path(__file__).resolve().parents[1] / "main.py"), "--spotdl-child"]
     command.extend([
         "download", url,
-        "--output", spotify_output_template(folder, settings.get("playlist_numbering", True)),
+        "--output", spotify_output_template(folder, settings.get("playlist_numbering", False)),
         "--format", str(settings.get("spotify_audio_format", "mp3")),
         "--bitrate", str(settings.get("spotify_bitrate", "320k")),
         "--audio", "soundcloud", "youtube-music", "youtube",

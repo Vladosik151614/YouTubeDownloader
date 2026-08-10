@@ -2,6 +2,17 @@
 
 All notable public release changes should be documented here.
 
+## 0.1.4 - 2026-08-10
+
+- Implemented clearer user-facing download errors with suggested recovery actions; packaged-release verification is pending.
+- Implemented per-task output-folder snapshots so later folder changes do not redirect active downloads; packaged-release verification is pending.
+- Implemented codec display in the queue and codec-aware post-download conversion; packaged-release verification is pending.
+- Made successful conversion a prerequisite for deleting the source when original retention is disabled; packaged-release verification is pending.
+- Added optional playlist filename numbering, disabled by default.
+- Cleaned up temporary merged `.m4a` format sidecars without deleting standalone audio files.
+- Updated release metadata and made Inno Setup mandatory for installer publication.
+- Publication time: `2026-08-10 22:42:39 +02:00` (Europe/Berlin).
+
 ## 0.1.3 - 2026-07-29
 
 - Fixed owner GitHub panel localization for Russian, English, German and Italian.

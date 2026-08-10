@@ -4,6 +4,7 @@ converter.py — probing and post-download video codec conversion through ffmpeg
 import os
 import json
 import subprocess
+import uuid
 from PySide6.QtCore import QThread, Signal
 from app.logger import logger
 from app.binary_manager import get_binary_path
@@ -130,7 +131,7 @@ class ConvertWorker(QThread):
     def __init__(self, filepath: str, settings: dict, parent=None):
         super().__init__(parent)
         self.filepath = filepath
-        self.settings = settings
+        self.settings = dict(settings)
         self._cancelled = False
         self._proc = None
 
@@ -171,8 +172,16 @@ class ConvertWorker(QThread):
         base, _ = os.path.splitext(self.filepath)
         suffix = normalized_target_codec(self.settings)
         out_path = base + f"_{suffix}{output_ext}"
-        if self.filepath.endswith(out_path):
-            out_path = base + "_conv.mp4"
+        if os.path.abspath(self.filepath) == os.path.abspath(out_path):
+            out_path = base + f"_converted{output_ext}"
+        if os.path.exists(out_path):
+            counter = 2
+            candidate = out_path
+            while os.path.exists(candidate):
+                candidate = base + f"_{suffix}_{counter}{output_ext}"
+                counter += 1
+            out_path = candidate
+        temp_path = os.path.splitext(out_path)[0] + f".part-{uuid.uuid4().hex[:8]}{output_ext}"
         
         ffmpeg = get_binary_path("ffmpeg")
         duration = self._get_duration()
@@ -187,7 +196,7 @@ class ConvertWorker(QThread):
         ]
         if output_ext == ".mp4":
             cmd += ["-movflags", "+faststart"]
-        cmd += ["-progress", "pipe:1", "-nostats", out_path]
+        cmd += ["-progress", "pipe:1", "-nostats", temp_path]
         
         logger.info(f"Running ffmpeg: {' '.join(cmd)}")
         
@@ -207,6 +216,15 @@ class ConvertWorker(QThread):
             for line in self._proc.stdout:
                 if self._cancelled:
                     self._proc.terminate()
+                    try:
+                        self._proc.wait(timeout=5)
+                    except Exception:
+                        pass
+                    if os.path.exists(temp_path):
+                        try:
+                            os.remove(temp_path)
+                        except OSError:
+                            pass
                     self.finished.emit(self.filepath, "", False, "Отменено пользователем")
                     return
                 
@@ -224,20 +242,43 @@ class ConvertWorker(QThread):
                         pass
         
         self._proc.wait()
+        if self._proc.stdout:
+            self._proc.stdout.close()
         
-        if self._proc.returncode == 0 and os.path.isfile(out_path):
-            logger.info(f"Conversion success: {out_path}")
+        verified = (
+            self._proc.returncode == 0
+            and os.path.isfile(temp_path)
+            and os.path.getsize(temp_path) > 0
+            and has_video_stream(temp_path)
+            and probe_codec(temp_path) == suffix
+        )
+        if verified:
+            os.replace(temp_path, out_path)
+            logger.info(f"Conversion verified and finalized: {out_path}")
             if not keep_originals:
                 try:
                     os.remove(self.filepath)
                     logger.info(f"Removed original file: {self.filepath}")
                 except Exception as e:
-                    logger.warning(f"Could not remove original: {e}")
+                    warning = f"Новый файл готов, но исходный файл не удалось удалить: {e}"
+                    logger.warning(warning)
+                    self.finished.emit(self.filepath, out_path, True, warning)
+                    return
             self.finished.emit(self.filepath, out_path, True, "")
         else:
+            actual_codec = probe_codec(temp_path) if os.path.isfile(temp_path) else "unknown"
+            if os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except OSError:
+                    pass
             stderr_tail = "\n".join(output_tail)[-700:]
             logger.error(f"ffmpeg conversion error (code {self._proc.returncode}): {stderr_tail}")
-            detail = f"Ошибка ffmpeg (код {self._proc.returncode})"
+            detail = (
+                f"Перекодирование не завершено или итоговый кодек не прошёл проверку "
+                f"(ожидался {suffix}, получен {actual_codec}, код ffmpeg {self._proc.returncode}). "
+                "Исходный файл сохранён."
+            )
             if stderr_tail:
                 detail += f": {stderr_tail}"
             self.finished.emit(self.filepath, "", False, detail)
