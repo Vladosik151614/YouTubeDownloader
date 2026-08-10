@@ -10,6 +10,7 @@ All notable public release changes should be documented here.
 - Made successful conversion a prerequisite for deleting the source when original retention is disabled; packaged-release verification is pending.
 - Added optional playlist filename numbering, disabled by default.
 - Cleaned up temporary merged `.m4a` format sidecars without deleting standalone audio files.
+- Fixed clipping of the selected encoder name on the main download screen.
 - Updated release metadata and made Inno Setup mandatory for installer publication.
 - Publication time: `2026-08-10 22:42:39 +02:00` (Europe/Berlin).
 

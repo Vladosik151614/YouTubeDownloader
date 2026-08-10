@@ -12,6 +12,7 @@ Implemented; packaged-release verification is still pending:
 - Applied selected codec conversion after download; source deletion is allowed only after successful conversion and when keeping originals is disabled.
 - Added an on/off playlist-numbering control. It is off by default, so new files have no `001 -`, `002 -` or similar prefix unless the user enables it.
 - Removed only merged yt-dlp `.m4a` format sidecars after the final video exists; standalone audio downloads are preserved.
+- Widened the encoder selector so `Авто GPU` is displayed completely without clipping adjacent controls.
 - Updated application, support-report, updater, installer and owner workflow version metadata to `0.1.4`.
 
 Packaging safeguards:

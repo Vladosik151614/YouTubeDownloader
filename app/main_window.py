@@ -162,7 +162,7 @@ class MainWindow(QMainWindow):
             btn.style().unpolish(btn)
             btn.style().polish(btn)
 
-    def _mini_combo(self, label_text: str, combo: QComboBox) -> QWidget:
+    def _mini_combo(self, label_text: str, combo: QComboBox, minimum_width: int = 104) -> QWidget:
         box = QFrame()
         box.setObjectName("smart_card")
         layout = QVBoxLayout(box)
@@ -171,8 +171,8 @@ class MainWindow(QMainWindow):
         label = QLabel(label_text)
         label.setObjectName("mini_label")
         layout.addWidget(label)
-        combo.setMinimumWidth(104)
-        combo.setMaximumWidth(132)
+        combo.setMinimumWidth(minimum_width)
+        combo.setMaximumWidth(max(132, minimum_width))
         layout.addWidget(combo)
         return box
 
@@ -229,7 +229,7 @@ class MainWindow(QMainWindow):
         tool_layout.addWidget(self.preview_label)
 
         smart_row = QHBoxLayout()
-        smart_row.setSpacing(8)
+        smart_row.setSpacing(4)
         
         smart_card = QFrame()
         smart_card.setObjectName("smart_card")
@@ -257,7 +257,7 @@ class MainWindow(QMainWindow):
         self.quick_encoder_combo = QComboBox()
         self.quick_encoder_combo.addItems(["Авто GPU", "NVENC", "QSV", "AMF", "CPU"])
         self.quick_encoder_combo.currentIndexChanged.connect(self._on_quick_encoder_changed)
-        smart_row.addWidget(self._mini_combo("Энкодер", self.quick_encoder_combo))
+        smart_row.addWidget(self._mini_combo("Энкодер", self.quick_encoder_combo, 124))
 
         self.quick_codec_combo = QComboBox()
         self.quick_codec_combo.addItems(["Оригинал", "H.264", "VP9", "AV1"])
