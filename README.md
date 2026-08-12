@@ -27,7 +27,7 @@ Latest Windows installer:
 [Download YouTube Downloader for Windows](https://github.com/Vladosik151614/YouTubeDownloader/releases/latest)
 
 Direct installer link:
-[YouTubeDownloaderSetup-0.1.4.exe](https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.4.exe)
+[YouTubeDownloaderSetup-0.1.5.exe](https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.5.exe)
 
 Read the [Privacy Policy](PRIVACY.md) before sharing logs or publishing builds.
 
@@ -46,6 +46,7 @@ Most downloader tools are either command-line utilities, ad-heavy websites, or u
 
 - Windows GUI downloader for videos, music, playlists, channels and clips where supported.
 - Multi-service workflow for YouTube, TikTok, Twitch, SoundCloud, Spotify metadata resolving and other supported links.
+- TikTok profile and collection catalog on the first download screen with four-column cards, real covers, inline muted hover preview, source quality labels and per-card or bulk actions.
 - Download profiles for video/audio type, quality, FPS, container, codec and encoder mode.
 - Optional H.264 conversion with GPU-first mode and CPU fallback.
 - Local history, queue actions, retry, pause, cancel and open-folder controls.
@@ -74,7 +75,7 @@ Most downloader tools are either command-line utilities, ad-heavy websites, or u
 | Service | Support | Notes |
 | --- | --- | --- |
 | YouTube | Video, audio and playlists where supported | Public content should work without sign-in |
-| TikTok | Video where supported | Depends on source availability |
+| TikTok | Single video, full profile, selected profile videos and collections | Shared 1080p/60 FPS, 2K or 4K output profile; login/cookies may be required |
 | Twitch | Clips and videos where supported | Some content may require access |
 | SoundCloud | Audio where supported | Depends on provider/source |
 | Spotify | Metadata-based music resolving | DRM-protected Spotify audio is not decrypted |
@@ -94,13 +95,13 @@ Most downloader tools are either command-line utilities, ad-heavy websites, or u
 Normal install:
 
 ```powershell
-irm "https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.4.exe" -OutFile "$env:TEMP\YouTubeDownloaderSetup.exe"; Start-Process "$env:TEMP\YouTubeDownloaderSetup.exe" -Wait
+irm "https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.5.exe" -OutFile "$env:TEMP\YouTubeDownloaderSetup.exe"; Start-Process "$env:TEMP\YouTubeDownloaderSetup.exe" -Wait
 ```
 
 Silent install:
 
 ```powershell
-$url = "https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.4.exe"
+$url = "https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.5.exe"
 $installer = "$env:TEMP\YouTubeDownloaderSetup.exe"
 Invoke-WebRequest $url -OutFile $installer
 Start-Process $installer -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" -Wait

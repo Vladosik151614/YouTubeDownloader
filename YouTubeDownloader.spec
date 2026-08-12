@@ -3,7 +3,7 @@ from PyInstaller.utils.hooks import collect_all
 
 datas = [('youtube.ico', '.'), ('app/assets/service_icons', 'app/assets/service_icons')]
 binaries = []
-hiddenimports = ['yt_dlp', 'yt_dlp.extractor', 'yt_dlp.extractor.lazy_extractors', 'PySide6.QtCore', 'PySide6.QtWidgets', 'PySide6.QtGui']
+hiddenimports = ['yt_dlp', 'yt_dlp.extractor', 'yt_dlp.extractor.lazy_extractors', 'PySide6.QtCore', 'PySide6.QtWidgets', 'PySide6.QtGui', 'PySide6.QtMultimedia', 'PySide6.QtMultimediaWidgets']
 tmp_ret = collect_all('yt_dlp')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 tmp_ret = collect_all('spotdl')

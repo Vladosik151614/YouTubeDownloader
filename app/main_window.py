@@ -1,22 +1,11 @@
-"""
-main_window.py — главное окно приложения YouTube Downloader
-с аппаратным ускорением GPU, авто-обновлением, пропуском ошибок плейлистов и тонкой настройкой перекодирования.
-"""
-import os
-import sys
-import shutil
-import uuid
-import subprocess
-import webbrowser
+import os, sys, shutil, uuid, subprocess, webbrowser
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QLabel,
     QPushButton, QLineEdit, QFileDialog, QMessageBox, QStackedWidget,
-    QFrame, QSizePolicy, QDialog, QListWidget, QListWidgetItem,
-    QDialogButtonBox, QComboBox, QApplication
+    QFrame, QSizePolicy, QComboBox, QApplication
 )
 from PySide6.QtCore import Qt, QSize, QTimer
 from PySide6.QtGui import QFont, QIcon, QColor
-
 from app.settings_manager import load_settings, save_settings
 from app.settings_page import SettingsPage
 from app.history_page import HistoryPage
@@ -24,13 +13,14 @@ from app.accounts_page import AccountsPage
 from app.history_store import add_history_entry
 from app.queue_widget import QueueWidget
 from app.downloader import DownloadWorker
-from app.converter import probe_codec, has_video_stream, normalized_target_codec, ConvertWorker
+from app.converter import ConvertWorker, has_video_stream, needs_profile_conversion, normalized_target_codec, probe_codec
 from app.toggle_switch import ToggleSwitch
 from app.logger import logger
 from app.updater import AppUpdateWorker, UpdateWorker
 from app.binary_manager import get_resource_path
 from app.link_preview import LinkPreviewWorker
 from app.support_dialog import SupportErrorDialog
+from app.error_messages import classify_download_error
 from app.tray_controller import TrayController
 from app.localization import apply_translations, translate
 def owner_tools_available():
@@ -40,59 +30,54 @@ OwnerToolsPage = None
 from app.process_utils import hidden_subprocess_kwargs
 from app.sidebar_button import SidebarNavButton
 from app.fix_report_page import APP_VERSION, FixReportPage
-
+from app.tiktok_catalog import is_tiktok_collection_url
+from app.main_window_tiktok import (
+    close_tiktok_catalog, open_tiktok_catalog,
+    queue_tiktok_download, refresh_queue_visibility,
+)
 from app.theme import app_qss
-
-
 class MainWindow(QMainWindow):
+    _open_tiktok_catalog = open_tiktok_catalog
+    _queue_tiktok_download = queue_tiktok_download
+    _close_tiktok_catalog = close_tiktok_catalog
+    _refresh_queue_visibility = refresh_queue_visibility
     def __init__(self):
         super().__init__()
         self.settings = load_settings()
-        self._workers = {}       # item_id -> DownloadWorker
-        self._conv_workers = {}  # filepath -> ConvertWorker
-        self._item_urls = {}     # item_id -> source URL
-        self._item_paths = {}    # item_id -> downloaded file/folder
-        self._item_errors = {}   # item_id -> last error
+        self._workers = {}; self._conv_workers = {}
+        self._item_urls = {}; self._item_paths = {}; self._item_errors = {}
         self._item_settings = {}  # item_id -> immutable profile snapshot
-        self._item_output_folders = {}  # item_id -> immutable selected folder
-        self._item_produced_files = {}  # item_id -> files created by this task only
-        self._paused_urls = {}   # item_id -> source URL paused by user
+        self._item_output_folders = {}; self._item_produced_files = {}
+        self._paused_urls = {}
         self._pending_downloads = []
         self._active_download_ids = set()
         self._preview_worker = None
         self._app_update_worker = None
         self._tray = None
         self._owner_tools_enabled = owner_tools_available()
-        
         self._setup_window()
         self._apply_style()
         self._build_ui()
         self._tray = TrayController(self)
         self._start_monitors()
         QTimer.singleShot(2500, self._auto_check_app_update)
-
     def _setup_window(self):
         self.setWindowTitle("YouTube Downloader")
-        self.setMinimumSize(900, 620)
-        self.resize(1080, 700)
-        
+        self.setMinimumSize(1080, 700)
+        self.resize(1360, 860)
         # Устанавливаем иконку окна из файла youtube.ico если он есть
         ico_path = get_resource_path("youtube.ico")
         if os.path.isfile(ico_path):
             self.setWindowIcon(QIcon(ico_path))
-
     def _apply_style(self):
         self.setStyleSheet(app_qss(self.settings.get("theme", "graphite_red")))
-
     def _build_ui(self):
         central = QWidget()
         central.setObjectName("central")
         self.setCentralWidget(central)
-
         root_layout = QHBoxLayout(central)
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.setSpacing(0)
-
         self.stack = QStackedWidget()
         self.stack.setObjectName("content_area")
         self.stack.addWidget(self._build_download_page())   # page 0
@@ -102,25 +87,20 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self._build_fix_report_widget()) # page 4
         if self._owner_tools_enabled:
             self.stack.addWidget(self._build_owner_tools_widget()) # page 5
-
         root_layout.addWidget(self._build_sidebar())
         root_layout.addWidget(self.stack, 1)
-
         self._switch_page(0)
         self.status_label = QLabel("Готов к загрузке")
         self.disk_space_label = QLabel("💾 Диск: —")
         self.disk_space_label.setStyleSheet("font-weight: bold;")
         self.version_label = QLabel(f"v{APP_VERSION}")
         self.version_label.setStyleSheet("color: #777;")
-        
         self.statusBar().addWidget(self.status_label, 1)
         self.statusBar().addPermanentWidget(self.version_label)
         self.statusBar().addPermanentWidget(self.disk_space_label)
         self._apply_language()
-
     def _apply_language(self):
         apply_translations(self, self.settings.get("language", "ru"))
-
     def _build_sidebar(self):
         sidebar = QWidget()
         sidebar.setObjectName("sidebar")
@@ -128,12 +108,10 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(sidebar)
         layout.setContentsMargins(10, 14, 10, 14)
         layout.setSpacing(5)
-
         logo = QLabel("▶  YT Downloader")
         logo.setFont(QFont("Segoe UI", 13, QFont.Weight.Bold))
         logo.setStyleSheet("color: #e94560; margin-bottom: 12px;")
         layout.addWidget(logo)
-
         self._nav_btns = []
         nav_items = [
             ("download", "Загрузка", 0),
@@ -150,18 +128,14 @@ class MainWindow(QMainWindow):
             btn.clicked.connect(lambda _, i=page_idx: self._switch_page(i))
             layout.addWidget(btn)
             self._nav_btns.append(btn)
-
         layout.addStretch()
-
         return sidebar
-
     def _switch_page(self, index: int):
         self.stack.setCurrentIndex(index)
         for i, btn in enumerate(self._nav_btns):
             btn.setProperty("active", str(i == index).lower())
             btn.style().unpolish(btn)
             btn.style().polish(btn)
-
     def _mini_combo(self, label_text: str, combo: QComboBox, minimum_width: int = 104) -> QWidget:
         box = QFrame()
         box.setObjectName("smart_card")
@@ -175,28 +149,25 @@ class MainWindow(QMainWindow):
         combo.setMaximumWidth(max(132, minimum_width))
         layout.addWidget(combo)
         return box
-
     def _build_download_page(self):
         page = QWidget()
         layout = QVBoxLayout(page)
+        self.download_layout = layout
         layout.setContentsMargins(22, 18, 22, 16)
         layout.setSpacing(11)
-
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         hdr = QLabel("Загрузка видео, музыки и плейлистов")
         hdr.setObjectName("section_title")
         hdr.setFont(QFont("Segoe UI", 17, QFont.Weight.Bold))
         layout.addWidget(hdr)
-
         subtitle = QLabel("Поддержка видео, музыки, плейлистов, каналов и клипов")
         subtitle.setObjectName("subtle")
         layout.addWidget(subtitle)
-
         tool_band = QFrame()
         tool_band.setObjectName("tool_band")
         tool_layout = QVBoxLayout(tool_band)
         tool_layout.setContentsMargins(12, 12, 12, 12)
         tool_layout.setSpacing(9)
-
         top_actions = QHBoxLayout()
         top_actions.setSpacing(10)
         paste_btn = QPushButton("Вставить ссылку")
@@ -205,13 +176,11 @@ class MainWindow(QMainWindow):
         paste_btn.setMinimumWidth(132)
         paste_btn.clicked.connect(self._paste_from_clipboard)
         top_actions.addWidget(paste_btn)
-
         self.url_edit = QLineEdit()
         self.url_edit.setPlaceholderText("Вставьте ссылку на видео, аудио, плейлист, канал или клип...")
         self.url_edit.setMinimumHeight(38)
         self.url_edit.returnPressed.connect(self._add_to_queue)
         top_actions.addWidget(self.url_edit, 1)
-
         add_btn = QPushButton("Скачать")
         add_btn.setMinimumHeight(38)
         add_btn.setMinimumWidth(96)
@@ -222,15 +191,12 @@ class MainWindow(QMainWindow):
         preview_btn.clicked.connect(self._preview_link)
         top_actions.addWidget(preview_btn)
         tool_layout.addLayout(top_actions)
-
         self.preview_label = QLabel("Проверка ссылки покажет сервис, тип, качество, FPS и субтитры.")
         self.preview_label.setObjectName("subtle")
         self.preview_label.setWordWrap(True)
         tool_layout.addWidget(self.preview_label)
-
         smart_row = QHBoxLayout()
         smart_row.setSpacing(4)
-        
         smart_card = QFrame()
         smart_card.setObjectName("smart_card")
         smart_layout = QHBoxLayout(smart_card)
@@ -243,27 +209,22 @@ class MainWindow(QMainWindow):
         smart_layout.addWidget(self.quick_auto_convert_switch)
         smart_layout.addWidget(smart_label)
         smart_row.addWidget(smart_card)
-
         self.quick_quality_combo = QComboBox()
         self.quick_quality_combo.addItems(["Лучшее", "2160p", "1440p", "1080p", "720p", "480p"])
         self.quick_quality_combo.currentIndexChanged.connect(self._on_quick_quality_changed)
         smart_row.addWidget(self._mini_combo("Качество", self.quick_quality_combo))
-
         self.quick_container_combo = QComboBox()
         self.quick_container_combo.addItems(["MP4", "MKV", "WebM"])
         self.quick_container_combo.currentIndexChanged.connect(self._on_quick_container_changed)
         smart_row.addWidget(self._mini_combo("Контейнер", self.quick_container_combo))
-
         self.quick_encoder_combo = QComboBox()
         self.quick_encoder_combo.addItems(["Авто GPU", "NVENC", "QSV", "AMF", "CPU"])
         self.quick_encoder_combo.currentIndexChanged.connect(self._on_quick_encoder_changed)
         smart_row.addWidget(self._mini_combo("Энкодер", self.quick_encoder_combo, 124))
-
         self.quick_codec_combo = QComboBox()
         self.quick_codec_combo.addItems(["Оригинал", "H.264", "VP9", "AV1"])
         self.quick_codec_combo.currentIndexChanged.connect(self._on_quick_codec_changed)
         smart_row.addWidget(self._mini_combo("Кодек", self.quick_codec_combo))
-
         numbering_card = QFrame()
         numbering_card.setObjectName("smart_card")
         numbering_layout = QHBoxLayout(numbering_card)
@@ -274,49 +235,56 @@ class MainWindow(QMainWindow):
         numbering_layout.addWidget(self.quick_numbering_switch)
         numbering_layout.addWidget(QLabel("Нумерация"))
         smart_row.addWidget(numbering_card)
-
         smart_row.addStretch()
         tool_layout.addLayout(smart_row)
-
         folder_row = QHBoxLayout()
         folder_row.setSpacing(8)
         folder_label = QLabel("📁 Папка:")
         folder_label.setObjectName("subtle")
         folder_row.addWidget(folder_label)
-
         self.folder_display = QLabel(self.settings.get("download_folder", "C:\\"))
         self.folder_display.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         folder_row.addWidget(self.folder_display, 1)
-
         change_folder_btn = QPushButton("Изменить")
         change_folder_btn.setMinimumWidth(82)
         change_folder_btn.clicked.connect(self._change_folder)
         folder_row.addWidget(change_folder_btn)
-
         open_folder_btn = QPushButton("📂  Открыть")
         open_folder_btn.setMinimumWidth(96)
         open_folder_btn.clicked.connect(self._open_download_folder)
         folder_row.addWidget(open_folder_btn)
-
         clear_btn = QPushButton("🗑  Очистить")
         clear_btn.setMinimumWidth(90)
         clear_btn.clicked.connect(self._clear_finished)
         folder_row.addWidget(clear_btn)
-
         tool_layout.addLayout(folder_row)
         self._sync_quick_controls()
         layout.addWidget(tool_band)
-
+        self.tiktok_catalog_host = QFrame()
+        self.tiktok_catalog_host.setObjectName("tiktok_catalog_host")
+        self.tiktok_catalog_host.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+        )
+        self.tiktok_catalog_layout = QVBoxLayout(self.tiktok_catalog_host)
+        self.tiktok_catalog_layout.setContentsMargins(0, 0, 0, 0)
+        self.tiktok_catalog_layout.setSpacing(0)
+        self.tiktok_catalog_host.setMaximumHeight(0)
+        self.tiktok_catalog_host.hide()
+        layout.addWidget(self.tiktok_catalog_host, 3)
+        layout.setStretchFactor(self.tiktok_catalog_host, 0)
         line = QFrame()
         line.setFrameShape(QFrame.Shape.HLine)
         line.setStyleSheet("color: #0f3460;")
         layout.addWidget(line)
-
-        queue_hdr = QLabel("📋  Очередь загрузок")
-        queue_hdr.setFont(QFont("Segoe UI", 13, QFont.Weight.Bold))
-        queue_hdr.setObjectName("subtle")
-        layout.addWidget(queue_hdr)
-
+        self.queue_section = QFrame()
+        self.queue_section.setObjectName("queue_section")
+        queue_layout = QVBoxLayout(self.queue_section)
+        queue_layout.setContentsMargins(0, 0, 0, 0)
+        queue_layout.setSpacing(7)
+        self.queue_hdr = QLabel("📋  Очередь загрузок")
+        self.queue_hdr.setFont(QFont("Segoe UI", 13, QFont.Weight.Bold))
+        self.queue_hdr.setObjectName("subtle")
+        queue_layout.addWidget(self.queue_hdr)
         self.queue_widget = QueueWidget()
         self.queue_widget.cancel_requested.connect(self._cancel_item)
         self.queue_widget.pause_requested.connect(self._pause_item)
@@ -324,38 +292,33 @@ class MainWindow(QMainWindow):
         self.queue_widget.open_requested.connect(self._open_queue_item)
         self.queue_widget.retry_requested.connect(self._retry_item)
         self.queue_widget.details_requested.connect(self._show_item_details)
-        layout.addWidget(self.queue_widget, 1)
-
+        queue_layout.addWidget(self.queue_widget, 1)
+        layout.addWidget(self.queue_section, 1)
+        layout.setStretchFactor(self.queue_section, 0)
+        self._refresh_queue_visibility()
         return page
-
     def _build_settings_widget(self):
         self.settings_page = SettingsPage(self.settings)
         self.settings_page.settings_changed.connect(self._on_settings_changed)
         return self.settings_page
-
     def _build_history_widget(self):
         self.history_page = HistoryPage()
         return self.history_page
-
     def _build_accounts_widget(self):
         self.accounts_page = AccountsPage()
         return self.accounts_page
-
     def _build_fix_report_widget(self):
         self.fix_report_page = FixReportPage()
         return self.fix_report_page
-
     def _build_owner_tools_widget(self):
         self.owner_tools_page = OwnerToolsPage()
         return self.owner_tools_page
-
     def _start_monitors(self):
         self._update_disk_space()
         self.space_timer = QTimer(self)
         self.space_timer.setInterval(5000)
         self.space_timer.timeout.connect(self._update_disk_space)
         self.space_timer.start()
-
     def _auto_check_app_update(self):
         if not self.settings.get("auto_update_app", True):
             return
@@ -364,7 +327,6 @@ class MainWindow(QMainWindow):
         self._app_update_worker = AppUpdateWorker(self.settings, download=False)
         self._app_update_worker.checked.connect(self._on_app_update_checked)
         self._app_update_worker.start()
-
     def _on_app_update_checked(self, info: dict):
         if not info.get("ok") or not info.get("available"):
             return
@@ -383,7 +345,6 @@ class MainWindow(QMainWindow):
             self._app_update_worker.start()
         elif info.get("html_url"):
             webbrowser.open(info["html_url"])
-
     def _on_app_update_downloaded(self, success: bool, path: str):
         if not success:
             QMessageBox.warning(self, "Обновление приложения", path)
@@ -403,14 +364,11 @@ class MainWindow(QMainWindow):
             QApplication.quit()
         except Exception as exc:
             QMessageBox.warning(self, "Обновление приложения", f"Не удалось запустить установщик:\n{exc}")
-
     def _notify(self, title: str, message: str):
         if self._tray:
             self._tray.notify(title, message)
-
     def closeEvent(self, event):
         self._tray.handle_close_event(event) if self._tray else event.accept()
-
     def _update_disk_space(self):
         folder = self.settings.get("download_folder", "C:\\")
         try:
@@ -422,14 +380,12 @@ class MainWindow(QMainWindow):
             self.disk_space_label.setText(f"💾 {drive_name} Свободно: {free_gb:.1f} ГБ")
         except Exception:
             self.disk_space_label.setText("💾 Диск: N/A")
-
     def _on_quick_auto_convert_toggled(self, checked: bool):
         self.settings["auto_convert"] = checked
         save_settings(self.settings)
         if hasattr(self, 'settings_page'):
             self.settings_page.settings = dict(self.settings)
             self.settings_page.auto_convert_sw.setChecked(checked)
-
     def _paste_from_clipboard(self):
         text = QApplication.clipboard().text().strip()
         if text:
@@ -437,7 +393,6 @@ class MainWindow(QMainWindow):
             self.status_label.setText("Ссылка вставлена. Нажмите «Скачать», чтобы начать загрузку.")
         else:
             self.status_label.setText("Буфер обмена пуст")
-
     def _sync_quick_controls(self):
         if hasattr(self, "quick_quality_combo"):
             quality_idx = {"best": 0, "2160": 1, "1440": 2, "1080": 3, "720": 4, "480": 5}.get(
@@ -473,7 +428,6 @@ class MainWindow(QMainWindow):
             self.quick_numbering_switch.blockSignals(True)
             self.quick_numbering_switch.setChecked(self.settings.get("playlist_numbering", False))
             self.quick_numbering_switch.blockSignals(False)
-
     def _save_quick_setting(self, key: str, value: str):
         self.settings[key] = value
         if key == "video_encoder":
@@ -483,16 +437,12 @@ class MainWindow(QMainWindow):
         if hasattr(self, "settings_page"):
             self.settings_page.settings = dict(self.settings)
             self.settings_page._load_values()
-
     def _on_quick_quality_changed(self, index: int):
         self._save_quick_setting("download_quality", {0: "best", 1: "2160", 2: "1440", 3: "1080", 4: "720", 5: "480"}.get(index, "1080"))
-
     def _on_quick_container_changed(self, index: int):
         self._save_quick_setting("container", {0: "mp4", 1: "mkv", 2: "webm"}.get(index, "mp4"))
-
     def _on_quick_encoder_changed(self, index: int):
         self._save_quick_setting("video_encoder", {0: "auto", 1: "h264_nvenc", 2: "h264_qsv", 3: "h264_amf", 4: "libx264"}.get(index, "auto"))
-
     def _on_quick_codec_changed(self, index: int):
         codec = {0: "original", 1: "h264", 2: "vp9", 3: "av1"}.get(index, "original")
         self.settings["default_codec"] = codec
@@ -501,14 +451,12 @@ class MainWindow(QMainWindow):
         if hasattr(self, "settings_page"):
             self.settings_page.settings = dict(self.settings)
             self.settings_page._load_values()
-
     def _on_quick_numbering_toggled(self, checked: bool):
         self.settings["playlist_numbering"] = bool(checked)
         save_settings(self.settings)
         if hasattr(self, "settings_page"):
             self.settings_page.settings = dict(self.settings)
             self.settings_page._load_values()
-
     def _add_to_queue(self):
         url = self.url_edit.text().strip()
         if not url:
@@ -517,20 +465,25 @@ class MainWindow(QMainWindow):
         if not (url.startswith("http://") or url.startswith("https://")):
             QMessageBox.warning(self, "Ошибка", "Введите корректный URL (http:// или https://)")
             return
-
-        if self._enqueue_url(url):
+        if is_tiktok_collection_url(url):
+            added = self._open_tiktok_catalog(url)
+        else:
+            added = self._enqueue_url(url)
+        if added:
             self.url_edit.clear()
-
     def _preview_link(self):
         url = self.url_edit.text().strip()
         if not url or not url.startswith(("http://", "https://")):
             self.preview_label.setText("Вставьте корректную ссылку для проверки.")
             return
+        if is_tiktok_collection_url(url):
+            if self._open_tiktok_catalog(url):
+                self.url_edit.clear()
+            return
         self.preview_label.setText("Проверяю ссылку...")
         self._preview_worker = LinkPreviewWorker(url, self.settings)
         self._preview_worker.ready.connect(self._on_preview_ready)
         self._preview_worker.start()
-
     def _on_preview_ready(self, data: dict):
         if not data.get("ok"):
             self.preview_label.setText(f"Не удалось проверить ссылку: {data.get('error', 'ошибка')}")
@@ -540,7 +493,6 @@ class MainWindow(QMainWindow):
             f"Длительность: {data['duration']} · Элементов: {data['count']} · "
             f"Качество: {data['qualities']} · FPS: {data['fps']} · Субтитры: {data['subtitles']}"
         )
-
     def _enqueue_url(self, url: str, *, task_settings: dict | None = None, output_folder: str | None = None) -> bool:
         item_id = str(uuid.uuid4())[:8]
         task_settings = dict(task_settings or self.settings)
@@ -551,15 +503,14 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Ошибка папки", f"Не удалось создать папку: {e}")
             return False
-
         self.queue_widget.add_item(item_id, url)
+        self._refresh_queue_visibility()
         if hasattr(self.queue_widget, "set_target_codec"):
             self.queue_widget.set_target_codec(item_id, normalized_target_codec(task_settings))
         self._item_urls[item_id] = url
         self._item_settings[item_id] = task_settings
         self._item_output_folders[item_id] = output_folder
         self.status_label.setText(f"Добавлено в очередь: {url[:50]}...")
-
         worker = DownloadWorker(item_id, url, output_folder, task_settings)
         worker.progress.connect(self._on_progress)
         worker.status.connect(self._on_status)
@@ -570,12 +521,13 @@ class MainWindow(QMainWindow):
         worker.playlist_item_progress.connect(self._on_playlist_item_progress)
         if hasattr(worker, "produced_files"):
             worker.produced_files.connect(self._on_produced_files_ready)
+        if hasattr(worker, "quality_ready"):
+            worker.quality_ready.connect(self._on_download_quality_ready)
         self._workers[item_id] = worker
         self._pending_downloads.append(item_id)
         self._start_next_downloads()
         logger.info(f"[{item_id}] Queued: {url}")
         return True
-
     def _start_next_downloads(self):
         max_active = max(1, int(self.settings.get("max_concurrent_downloads", 2)))
         while self._pending_downloads and len(self._active_download_ids) < max_active:
@@ -586,7 +538,6 @@ class MainWindow(QMainWindow):
             self._active_download_ids.add(item_id)
             worker.start()
             logger.info(f"[{item_id}] Started download worker")
-
     def _cancel_item(self, item_id: str):
         worker = self._workers.get(item_id)
         if worker:
@@ -606,7 +557,6 @@ class MainWindow(QMainWindow):
             self.status_label.setText("Загрузка отменена")
             logger.info(f"[{item_id}] Cancelled by user")
         self._paused_urls.pop(item_id, None)
-
     def _pause_item(self, item_id: str):
         url = self._item_urls.get(item_id, "")
         worker = self._workers.get(item_id)
@@ -619,7 +569,6 @@ class MainWindow(QMainWindow):
             worker.cancel()
         self.queue_widget.update_status(item_id, "Пауза")
         self.status_label.setText("Загрузка поставлена на паузу")
-
     def _resume_item(self, item_id: str):
         url = self._paused_urls.pop(item_id, "") or self._item_urls.get(item_id, "")
         if not url:
@@ -630,7 +579,6 @@ class MainWindow(QMainWindow):
             task_settings=self._item_settings.get(item_id),
             output_folder=self._item_output_folders.get(item_id),
         )
-
     def _change_folder(self):
         folder = QFileDialog.getExistingDirectory(
             self, "Выбрать папку для загрузок",
@@ -644,7 +592,6 @@ class MainWindow(QMainWindow):
             if hasattr(self, 'settings_page'):
                 self.settings_page.settings = dict(self.settings)
                 self.settings_page._load_values()
-
     def _open_download_folder(self):
         folder = self.settings.get("download_folder", "C:\\")
         try:
@@ -654,10 +601,9 @@ class MainWindow(QMainWindow):
         except Exception as e:
             logger.error(f"Cannot open download folder: {e}")
             QMessageBox.critical(self, "Ошибка папки", f"Не удалось открыть папку:\n{e}")
-
     def _clear_finished(self):
         self.queue_widget.clear_finished()
-
+        self._refresh_queue_visibility()
     def _open_queue_item(self, item_id: str):
         path = self._item_paths.get(item_id) or self.queue_widget.result_path(item_id)
         if not path:
@@ -672,7 +618,6 @@ class MainWindow(QMainWindow):
         except Exception as e:
             logger.error(f"Cannot open queue item folder [{item_id}]: {e}")
             QMessageBox.critical(self, "Ошибка папки", f"Не удалось открыть папку:\n{e}")
-
     def _retry_item(self, item_id: str):
         url = self._item_urls.get(item_id)
         if not url:
@@ -683,40 +628,43 @@ class MainWindow(QMainWindow):
             task_settings=self._item_settings.get(item_id),
             output_folder=self._item_output_folders.get(item_id),
         )
-
     def _show_item_details(self, item_id: str):
         url = self._item_urls.get(item_id, "")
         path = self._item_paths.get(item_id, "")
         error = self._item_errors.get(item_id) or self.queue_widget.error_text(item_id) or "Подробностей нет."
         SupportErrorDialog(self, url, path, error, self.settings).exec()
-
     def _on_progress(self, item_id: str, percent: float, speed: str, eta: str):
         self.queue_widget.update_progress(item_id, percent, speed, eta)
         self.status_label.setText(f"Загрузка [{item_id}]: {percent:.1f}% | ⚡ Скорость: {speed} | ⏱ ETA: {eta}")
-
     def _on_status(self, item_id: str, text: str):
         self.queue_widget.update_status(item_id, text)
-
     def _on_info_ready(self, item_id: str, title: str, is_pl: bool, count: int, size_str: str):
         self.queue_widget.update_info(item_id, title, size_str)
         tag = f"[Плейлист: {count} видео]" if is_pl else "[Видео]"
         self.queue_widget.update_status(item_id, f"{tag} Загрузка...")
         self.status_label.setText(f"Получены данные: {title} (Размер: {size_str})")
-
     def _on_playlist_items_ready(self, item_id: str, entries: list):
         self.queue_widget.set_playlist_items(item_id, entries)
-
     def _on_thumbnail_ready(self, item_id: str, thumbnail: str):
         self.queue_widget.set_item_thumbnail(item_id, thumbnail)
-
     def _on_playlist_item_progress(self, item_id: str, playlist_index: int, status: str, percent: float):
         self.queue_widget.update_playlist_item(item_id, playlist_index, status, percent)
-
     def _on_produced_files_ready(self, item_id: str, files: list):
         self._item_produced_files[item_id] = [
             os.path.abspath(path) for path in files if path and os.path.isfile(path)
         ]
-
+    def _on_download_quality_ready(self, item_id: str, quality: dict):
+        label = str((quality or {}).get("label") or "")
+        codec = str((quality or {}).get("codec") or "")
+        size = int((quality or {}).get("size") or 0)
+        if label and (quality or {}).get("confidence") == "limited":
+            label = f"{label} · HD не подтверждён"
+        if codec and hasattr(self.queue_widget, "set_final_codec"):
+            self.queue_widget.set_final_codec(item_id, codec)
+        if size and hasattr(self.queue_widget, "update_size_bytes"):
+            self.queue_widget.update_size_bytes(item_id, size)
+        if label:
+            self.queue_widget.update_status(item_id, f"TikTok: {label}")
     def _on_download_finished(self, item_id: str, filepath: str, success: bool, error_msg: str):
         self._workers.pop(item_id, None)
         self._active_download_ids.discard(item_id)
@@ -733,7 +681,6 @@ class MainWindow(QMainWindow):
         add_history_entry(url, title, filepath or "", success, error_msg or "")
         if hasattr(self, "history_page"):
             self.history_page.refresh()
-        
         if success:
             produced_files = list(self._item_produced_files.get(item_id, []))
             task_settings = dict(self._item_settings.get(item_id, self.settings))
@@ -752,7 +699,9 @@ class MainWindow(QMainWindow):
             if task_settings.get("auto_convert", True) is True:
                 video_files = [
                     path for path in produced_files
-                    if path.lower().endswith((".mp4", ".mkv", ".webm"))
+                    if path.lower().endswith(
+                        (".mp4", ".mkv", ".webm", ".mov", ".avi", ".m4v", ".ts")
+                    )
                 ]
                 if video_files:
                     self._check_and_prompt_conversion(video_files, is_playlist=len(video_files) > 1, settings=task_settings, item_id=item_id)
@@ -766,43 +715,54 @@ class MainWindow(QMainWindow):
             logger.info(f"[{item_id}] Cancelled")
         else:
             self.queue_widget.update_status(item_id, "Ошибка")
-            self.status_label.setText(f"Ошибка: {error_msg}")
+            error_info = classify_download_error(error_msg)
+            self.status_label.setText(f"Ошибка: {error_info.title}")
             logger.error(f"[{item_id}] Failed: {error_msg}")
             if error_msg and error_msg != "Отменено пользователем":
                 SupportErrorDialog(self, url, filepath or "", error_msg, self.settings).exec()
         self._start_next_downloads()
-
     def _check_and_prompt_conversion(self, filepaths: list, is_playlist: bool = False, *, settings: dict | None = None, item_id: str = ""):
         settings = dict(settings or self.settings)
         target_codec = normalized_target_codec(settings)
-        if target_codec == "original" or not settings.get("auto_convert", False):
+        if not settings.get("auto_convert", False):
             return
         needs_conversion = [
             f for f in filepaths
-            if os.path.isfile(f) and has_video_stream(f) and probe_codec(f) != target_codec
+            if os.path.isfile(f)
+            and has_video_stream(f)
+            and needs_profile_conversion(f, settings)
         ]
         if not needs_conversion:
             return
-
-        codec_label = target_codec.upper() if target_codec != "h264" else "H.264"
+        codec_label = (
+            "исходный" if target_codec == "original"
+            else ("H.264" if target_codec == "h264" else target_codec.upper())
+        )
+        profile_label = (
+            f"{settings.get('container', 'mp4').upper()} · {codec_label} · "
+            f"{settings.get('download_quality', '1080')}p · "
+            f"до {settings.get('fps_limit', '60')} FPS"
+        )
         should_convert = True
         if settings.get("ask_before_codec_convert", True):
             if is_playlist:
                 msg = (
-                    f"Плейлист скачан. Найдено файлов для смены кодека: {len(needs_conversion)}.\n\n"
-                    f"Изменить кодек на {codec_label}? Оригиналы будут удалены, если в настройках не включено сохранение оригиналов."
+                    f"Плейлист скачан. Обработать файлов по активному профилю: "
+                    f"{len(needs_conversion)}.\n\nПрофиль: {profile_label}.\n"
+                    "Исходники будут удалены только после проверки готовых файлов."
                 )
             elif len(needs_conversion) == 1:
                 msg = (
                     f"Видео скачано:\n\n{os.path.basename(needs_conversion[0])}\n\n"
-                    f"Изменить кодек на {codec_label}? Оригинал будет удалён, если в настройках не включено сохранение оригиналов."
+                    f"Применить активный профиль: {profile_label}?\n"
+                    "Исходник будет удалён только после проверки готового файла."
                 )
             else:
                 names = "\n".join(f"• {os.path.basename(f)}" for f in needs_conversion[:10])
-                msg = f"Изменить кодек этих файлов на {codec_label}?\n\n{names}"
+                msg = f"Применить профиль {profile_label} к этим файлам?\n\n{names}"
             reply = QMessageBox.question(
                 self,
-                f"Смена кодека на {codec_label}",
+                "Применение профиля загрузки",
                 msg,
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             )
@@ -810,28 +770,6 @@ class MainWindow(QMainWindow):
         if should_convert:
             for fp in needs_conversion:
                 self._start_conversion(fp, settings=settings, source_item_id=item_id)
-
-    def _legacy_check_and_prompt_conversion(self, filepaths: list):
-        non_h264 = [
-            f for f in filepaths
-            if os.path.isfile(f) and has_video_stream(f) and probe_codec(f) != "h264"
-        ]
-        if not non_h264:
-            return
-        if len(non_h264) == 1:
-            msg = f"Видео использует не H.264 кодек:\n\n{os.path.basename(non_h264[0])}\n\nКонвертировать сейчас в H.264?"
-        else:
-            names = "\n".join(f"• {os.path.basename(f)}" for f in non_h264[:10])
-            if len(non_h264) > 10:
-                names += f"\n... и ещё {len(non_h264) - 10}"
-            msg = f"Следующие видео требуют перекодирования в H.264:\n\n{names}\n\nПерекодировать на GPU NVIDIA?"
-        
-        reply = QMessageBox.question(self, "Перекодирование H.264 (NVIDIA GPU)", msg,
-                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        if reply == QMessageBox.StandardButton.Yes:
-            for fp in non_h264:
-                self._start_conversion(fp)
-
     def _start_conversion(self, filepath: str, *, settings: dict | None = None, source_item_id: str = ""):
         settings = dict(settings or self.settings)
         fake_id = "conv_" + str(uuid.uuid4())[:6]
@@ -841,14 +779,12 @@ class MainWindow(QMainWindow):
         self.queue_widget.update_status(fake_id, f"Перекодирование в {codec_label}...")
         if hasattr(self.queue_widget, "set_target_codec"):
             self.queue_widget.set_target_codec(fake_id, target_codec)
-
         worker = ConvertWorker(filepath, settings)
         worker.progress.connect(lambda fp, pct, fid=fake_id: self.queue_widget.update_progress(fid, pct, "—", "—"))
         worker.finished.connect(lambda fp, out, ok, err, fid=fake_id, sid=source_item_id: self._on_conv_finished(fid, fp, out, ok, err, sid))
         self._conv_workers[filepath] = worker
         worker.start()
         logger.info(f"Started GPU conversion: {filepath}")
-
     def _on_conv_finished(self, fake_id: str, filepath: str, out_path: str, success: bool, error: str, source_item_id: str = ""):
         self._item_paths[fake_id] = out_path or filepath or ""
         self._item_errors[fake_id] = error or ""
@@ -870,7 +806,6 @@ class MainWindow(QMainWindow):
         else:
             self.queue_widget.update_status(fake_id, "Ошибка")
             QMessageBox.critical(self, "Ошибка конвертации", f"Не удалось конвертировать:\n{error}")
-
     def _on_settings_changed(self, new_settings: dict):
         self.settings = new_settings
         self._apply_style()
@@ -883,4 +818,3 @@ class MainWindow(QMainWindow):
         self._start_next_downloads()
         self.status_label.setText(translate("Настройки сохранены", self.settings.get("language", "en")))
         logger.info("Settings updated")
-

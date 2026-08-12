@@ -221,7 +221,8 @@ class SettingsPage(QWidget):
         row += 1
         self._grid_switch(grid, row, "keep_originals_sw", "Сохранять оригиналы после конвертации")
         self._grid_switch(grid, row, "show_all_codecs_sw", "Показывать AV1 и VP9", 2)
-
+        row += 1
+        self._grid_switch(grid, row, "upscale_to_profile_sw", "Улучшать до выбранного разрешения, если исходник ниже")
         _, music_grid = self._grid_group("Музыка Spotify", layout)
         self.spotify_format_combo = _combo(["MP3", "M4A", "Opus", "FLAC", "WAV"])
         self._grid_row(music_grid, 0, "Формат:", self.spotify_format_combo)
@@ -375,6 +376,7 @@ class SettingsPage(QWidget):
             "beta_updates_sw": ("install_beta_updates", False),
             "auto_convert_sw": ("auto_convert", False),
             "ask_codec_convert_sw": ("ask_before_codec_convert", True),
+            "upscale_to_profile_sw": ("upscale_to_profile", False),
             "keep_originals_sw": ("keep_originals", False),
             "show_all_codecs_sw": ("show_all_codecs", True),
             "playlist_subfolders_sw": ("playlist_subfolders", True),
@@ -413,7 +415,6 @@ class SettingsPage(QWidget):
         path, _ = QFileDialog.getOpenFileName(self, "Выбрать файл доступа", "", "Text Files (*.txt);;All Files (*)")
         if path:
             self.cookies_file_edit.setText(path)
-
     def _update_encoder_status(self):
         found = available_encoders()
         labels = [name for key, name in (("h264_nvenc", "NVIDIA"), ("h264_qsv", "Intel"), ("h264_amf", "AMD")) if key in found]
@@ -513,6 +514,7 @@ class SettingsPage(QWidget):
             "beta_updates_sw": "install_beta_updates",
             "auto_convert_sw": "auto_convert",
             "ask_codec_convert_sw": "ask_before_codec_convert",
+            "upscale_to_profile_sw": "upscale_to_profile",
             "keep_originals_sw": "keep_originals",
             "show_all_codecs_sw": "show_all_codecs",
             "playlist_subfolders_sw": "playlist_subfolders",

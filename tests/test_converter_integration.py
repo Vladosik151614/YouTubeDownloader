@@ -3,7 +3,7 @@ import subprocess
 import tempfile
 import unittest
 
-from app.converter import ConvertWorker, probe_codec
+from app.converter import ConvertWorker, probe_codec, probe_video_info
 
 
 class ConverterIntegrationTests(unittest.TestCase):
@@ -50,6 +50,50 @@ class ConverterIntegrationTests(unittest.TestCase):
             self.assertTrue(os.path.isfile(source))
             self.assertTrue(result and not result[0][2], result)
             self.assertFalse(any(".part-" in name for name in os.listdir(folder)))
+
+    def test_profile_applies_container_resolution_and_fps(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source = self._source_video(folder)
+            result = []
+            worker = ConvertWorker(source, {
+                "default_codec": "h264",
+                "container": "mp4",
+                "download_quality": "60",
+                "fps_limit": "5",
+                "encoding_mode": "cpu_only",
+                "video_encoder": "libx264",
+                "keep_originals": False,
+            })
+            worker.finished.connect(
+                lambda src, out, ok, error: result.append((src, out, ok, error))
+            )
+            worker._convert()
+            self.assertTrue(result and result[0][2], result)
+            output = result[0][1]
+            info = probe_video_info(output)
+            self.assertEqual(os.path.splitext(output)[1].lower(), ".mp4")
+            self.assertLessEqual(min(info["width"], info["height"]), 60)
+            self.assertLessEqual(info["fps"], 5.1)
+
+    def test_profile_upscale_is_explicit_opt_in(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source = self._source_video(folder)
+            worker = ConvertWorker(source, {
+                "default_codec": "h264",
+                "container": "mp4",
+                "download_quality": "180",
+                "fps_limit": "best",
+                "upscale_to_profile": True,
+                "encoding_mode": "cpu_only",
+                "video_encoder": "libx264",
+                "keep_originals": False,
+            })
+            result = []
+            worker.finished.connect(lambda src, out, ok, error: result.append((src, out, ok, error)))
+            worker._convert()
+            self.assertTrue(result and result[0][2], result)
+            info = probe_video_info(result[0][1])
+            self.assertEqual(min(info["width"], info["height"]), 180)
 
 
 if __name__ == "__main__":

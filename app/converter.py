@@ -29,6 +29,33 @@ def probe_codec(filepath: str) -> str:
     return "unknown"
 
 
+def probe_video_info(filepath: str) -> dict:
+    """Read the first video stream properties used by the active profile."""
+    ffprobe = get_binary_path("ffprobe")
+    cmd = [
+        ffprobe, "-v", "quiet", "-print_format", "json",
+        "-show_streams", "-select_streams", "v:0", filepath,
+    ]
+    try:
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=30,
+            **hidden_subprocess_kwargs(),
+        )
+        stream = (json.loads(result.stdout or "{}").get("streams") or [{}])[0]
+        fps_text = str(stream.get("avg_frame_rate") or stream.get("r_frame_rate") or "0")
+        numerator, _, denominator = fps_text.partition("/")
+        fps = float(numerator or 0) / float(denominator or 1)
+        return {
+            "codec": str(stream.get("codec_name") or "unknown").lower(),
+            "width": int(stream.get("width") or 0),
+            "height": int(stream.get("height") or 0),
+            "fps": fps,
+        }
+    except Exception as exc:
+        logger.error(f"ffprobe profile error for {filepath}: {exc}")
+        return {"codec": "unknown", "width": 0, "height": 0, "fps": 0.0}
+
+
 def has_video_stream(filepath: str) -> bool:
     """Returns True only when the file contains a video stream."""
     ffprobe = get_binary_path("ffprobe")
@@ -53,6 +80,40 @@ def normalized_target_codec(settings: dict) -> str:
     codec = str(settings.get("default_codec", "original")).lower()
     aliases = {"avc": "h264", "x264": "h264", "copy": "original", "source": "original"}
     return aliases.get(codec, codec if codec in {"original", "h264", "vp9", "av1"} else "original")
+
+
+def normalized_target_container(settings: dict) -> str:
+    value = str(settings.get("container", "mp4")).lower().lstrip(".")
+    return value if value in {"mp4", "mkv", "webm"} else "mp4"
+
+
+def profile_conversion_reasons(filepath: str, settings: dict) -> list[str]:
+    """Return exact active-profile mismatches requested by the active profile."""
+    info = probe_video_info(filepath)
+    if not info.get("width") or not info.get("height"):
+        return ["video_stream"]
+    reasons = []
+    target_codec = normalized_target_codec(settings)
+    if target_codec != "original" and info["codec"] != target_codec:
+        reasons.append("codec")
+    if os.path.splitext(filepath)[1].lower() != f".{normalized_target_container(settings)}":
+        reasons.append("container")
+    quality = str(settings.get("download_quality", "1080"))
+    if quality.isdigit():
+        target = int(quality)
+        source = min(info["width"], info["height"])
+        if source > target:
+            reasons.append("resolution")
+        elif source < target and settings.get("upscale_to_profile", False):
+            reasons.append("upscale")
+    fps_limit = str(settings.get("fps_limit", "60"))
+    if fps_limit.isdigit() and info["fps"] > int(fps_limit) + 0.1:
+        reasons.append("fps")
+    return reasons
+
+
+def needs_profile_conversion(filepath: str, settings: dict) -> bool:
+    return bool(profile_conversion_reasons(filepath, settings))
 
 
 def available_encoders() -> set[str]:
@@ -104,16 +165,30 @@ def _select_h264_encoder(settings: dict) -> tuple[str, list[str], str]:
     raise RuntimeError("Не найден доступный H.264 энкодер для выбранного режима")
 
 
-def _select_video_codec(settings: dict) -> tuple[str, list[str], str, str]:
+def _select_video_codec(settings: dict) -> tuple[str, list[str], str]:
     target = normalized_target_codec(settings)
     if target == "h264":
         encoder, args, label = _select_h264_encoder(settings)
-        return encoder, args, label, ".mp4"
+        return encoder, args, label
     if target == "vp9":
-        return "libvpx-vp9", ["-crf", "30", "-b:v", "0", "-row-mt", "1"], "VP9", ".webm"
+        return "libvpx-vp9", ["-crf", "30", "-b:v", "0", "-row-mt", "1"], "VP9"
     if target == "av1":
-        return "libaom-av1", ["-crf", "30", "-b:v", "0", "-cpu-used", "6"], "AV1", ".mkv"
+        return "libaom-av1", ["-crf", "30", "-b:v", "0", "-cpu-used", "6"], "AV1"
     raise RuntimeError("Кодек оставлен оригинальным, конвертация не требуется")
+
+
+def _source_encoder(codec: str, settings: dict) -> tuple[str, list[str], str]:
+    if codec == "h264":
+        return _select_h264_encoder(settings)
+    if codec == "vp9":
+        return "libvpx-vp9", ["-crf", "30", "-b:v", "0", "-row-mt", "1"], "VP9"
+    if codec == "av1":
+        return "libaom-av1", ["-crf", "30", "-b:v", "0", "-cpu-used", "6"], "AV1"
+    if codec in {"hevc", "h265"} and "libx265" in available_encoders():
+        return "libx265", ["-preset", "fast", "-crf", "22"], "H.265"
+    raise RuntimeError(
+        "Для изменения разрешения или FPS исходного кодека выберите H.264, VP9 или AV1"
+    )
 
 
 class ConvertWorker(QThread):
@@ -165,12 +240,40 @@ class ConvertWorker(QThread):
 
     def _convert(self):
         keep_originals = self.settings.get("keep_originals", False)
-        encoder, preset_args, encoder_label, output_ext = _select_video_codec(self.settings)
+        source_info = probe_video_info(self.filepath)
+        reasons = profile_conversion_reasons(self.filepath, self.settings)
+        target_codec = normalized_target_codec(self.settings)
+        output_ext = f".{normalized_target_container(self.settings)}"
+        filters = []
+        quality = str(self.settings.get("download_quality", "1080"))
+        if ("resolution" in reasons or "upscale" in reasons) and quality.isdigit():
+            limit = int(quality)
+            filters.append(
+                f"scale=-2:{limit}"
+                if source_info["width"] >= source_info["height"]
+                else f"scale={limit}:-2"
+            )
+        fps_limit = str(self.settings.get("fps_limit", "60"))
+        if "fps" in reasons and fps_limit.isdigit():
+            filters.append(f"fps={int(fps_limit)}")
+
+        source_codec = source_info.get("codec", "unknown")
+        codec_already_matches = (
+            target_codec == "original" or target_codec == source_codec
+        )
+        if codec_already_matches and not filters:
+            encoder, preset_args, encoder_label = "copy", [], "без перекодирования"
+        elif target_codec == "original":
+            encoder, preset_args, encoder_label = _source_encoder(
+                source_codec, self.settings
+            )
+        else:
+            encoder, preset_args, encoder_label = _select_video_codec(self.settings)
         logger.info(f"Using {encoder_label} for encoding: {self.filepath}")
         self.log_line.emit(self.filepath, f"Кодирование: {encoder_label}")
         
         base, _ = os.path.splitext(self.filepath)
-        suffix = normalized_target_codec(self.settings)
+        suffix = target_codec if target_codec != "original" else "profile"
         out_path = base + f"_{suffix}{output_ext}"
         if os.path.abspath(self.filepath) == os.path.abspath(out_path):
             out_path = base + f"_converted{output_ext}"
@@ -190,9 +293,13 @@ class ConvertWorker(QThread):
             ffmpeg, "-y",
             "-i", self.filepath,
             "-c:v", encoder,
-        ] + preset_args + [
-            "-c:a", "aac" if output_ext == ".mp4" else "libopus",
-            "-b:a", "192k" if output_ext == ".mp4" else "160k",
+        ] + preset_args
+        if filters:
+            cmd += ["-vf", ",".join(filters)]
+        audio_codec = "libopus" if output_ext == ".webm" else "aac"
+        cmd += [
+            "-c:a", audio_codec,
+            "-b:a", "160k" if audio_codec == "libopus" else "192k",
         ]
         if output_ext == ".mp4":
             cmd += ["-movflags", "+faststart"]
@@ -245,12 +352,18 @@ class ConvertWorker(QThread):
         if self._proc.stdout:
             self._proc.stdout.close()
         
+        expected_codec = source_codec if target_codec == "original" else target_codec
+        remaining_mismatches = (
+            profile_conversion_reasons(temp_path, self.settings)
+            if os.path.isfile(temp_path) else ["missing"]
+        )
         verified = (
             self._proc.returncode == 0
             and os.path.isfile(temp_path)
             and os.path.getsize(temp_path) > 0
             and has_video_stream(temp_path)
-            and probe_codec(temp_path) == suffix
+            and probe_codec(temp_path) == expected_codec
+            and not remaining_mismatches
         )
         if verified:
             os.replace(temp_path, out_path)
@@ -276,7 +389,9 @@ class ConvertWorker(QThread):
             logger.error(f"ffmpeg conversion error (code {self._proc.returncode}): {stderr_tail}")
             detail = (
                 f"Перекодирование не завершено или итоговый кодек не прошёл проверку "
-                f"(ожидался {suffix}, получен {actual_codec}, код ffmpeg {self._proc.returncode}). "
+                f"(ожидался {expected_codec}, получен {actual_codec}, "
+                f"несовпадения профиля: {', '.join(remaining_mismatches) or 'нет'}, "
+                f"код ffmpeg {self._proc.returncode}). "
                 "Исходный файл сохранён."
             )
             if stderr_tail:

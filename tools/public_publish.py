@@ -98,6 +98,11 @@ def patch_owner_imports(target: Path) -> None:
         readme.write_text(text, encoding="utf-8")
 
 
+def ensure_commit_identity(target: Path) -> None:
+    run(["git", "config", "user.name", "Vladosik151614"], target)
+    run(["git", "config", "user.email", "vladosik151614@users.noreply.github.com"], target)
+
+
 def main() -> int:
     message = " ".join(sys.argv[1:]).strip() or "Update public release"
     run([sys.executable, "tools\\privacy_check.py"], ROOT)
@@ -106,6 +111,7 @@ def main() -> int:
     if target.exists():
         remove_tree(target)
     run(["git", "clone", PUBLIC_REPO, str(target)], ROOT, timeout=240)
+    ensure_commit_identity(target)
     clear_worktree(target)
     copy_public_tree(target)
     patch_owner_imports(target)

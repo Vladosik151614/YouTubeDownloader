@@ -9,6 +9,21 @@ import re
 
 from app.logger import logger
 
+TIKTOK_WATERMARK_FILTER = "[format_note!*=?watermarked]"
+TIKTOK_NO_WATERMARK_FORMAT = (
+    f"bestvideo*{TIKTOK_WATERMARK_FILTER}+bestaudio/"
+    f"best{TIKTOK_WATERMARK_FILTER}"
+)
+
+
+def exclude_tiktok_watermarked_formats(selector: str) -> str:
+    if TIKTOK_WATERMARK_FILTER in selector:
+        return selector
+    return re.sub(
+        r"\b(bestvideo\*?|best)(?=(?:\[|[+/]|$))",
+        rf"\1{TIKTOK_WATERMARK_FILTER}", selector,
+    )
+
 
 def format_bytes(size: int) -> str:
     if not size or size <= 0:
@@ -21,6 +36,10 @@ def format_bytes(size: int) -> str:
 
 
 def is_playlist(url: str) -> bool:
+    value = str(url or "").lower().split("#", 1)[0]
+    if "tiktok.com/" in value and "/video/" not in value:
+        if any(marker in value for marker in ("/playlist/", "/collection/")) or re.search(r"tiktok\.com/@[^/?]+/?(?:\?.*)?$", value):
+            return True
     playlist_patterns = [
         r"list=",
         r"/playlist\?",

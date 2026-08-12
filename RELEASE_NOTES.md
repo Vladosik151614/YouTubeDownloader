@@ -1,5 +1,25 @@
 # Release Notes
 
+## 0.1.5
+
+Release date: August 12, 2026. Release time: `2026-08-12 15:02:00 +02:00`.
+
+TikTok profile and playlist workflow:
+
+- Embedded the TikTok catalog directly below the controls on the first download screen; the queue remains visible and no separate catalog page opens.
+- Added real cover images on selectable medium/large cards, four cards per row, per-card expandable Download actions and profile/playlist bulk actions.
+- Added muted hover preview directly inside the hovered cover using TikTok's animated preview, without a permanent right-side preview panel.
+- Added the actual source resolution, FPS and codec to every card, including explicit 2K and 4K labels when those sources exist.
+- Applied the shared output profile to TikTok and every other video service: resolution, FPS, container, codec and encoder are snapshotted per task. The default remains 1080p/60 FPS; 2K and 4K are selectable from the main profile.
+- Extended verified post-processing to container, resolution and FPS mismatches as well as codec changes; MOV and other video inputs can be converted to the selected MP4 profile.
+- Added an explicit opt-in upscale switch for cases where the user wants the downloaded video processed up to the selected profile resolution. It stays disabled by default so artificial upscale is not shown as real source quality.
+- Added a TikTok quality experiment report with provider, quality, FPS, codec and no-watermark verification results.
+- Kept strict TikTok watermark exclusion while removing the old TikTok-only maximum-quality override that bypassed the active profile.
+- Added TikTok-specific access guidance for webpage challenge failures and retained the existing cookies/account workflow.
+- Updated application, installer, support report, updater and owner/public release workflow metadata to `0.1.5`.
+
+Publication timestamp: `2026-08-12 15:02:00 +02:00` (Europe/Berlin).
+
 ## 0.1.4
 
 Release date: August 10, 2026. Release time: `2026-08-10 22:42:39 +02:00` (Europe/Berlin).

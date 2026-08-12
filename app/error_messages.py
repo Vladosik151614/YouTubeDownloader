@@ -29,6 +29,40 @@ def classify_download_error(raw_message: str) -> DownloadErrorInfo:
     def result(category: str, title: str, message: str, *actions: str, retryable: bool = True):
         return DownloadErrorInfo(category, title, message, tuple(actions), raw, retryable)
 
+    if (
+        (
+            any(tag in text for tag in ("[tiktok]", "[tiktokcollection]", "[tiktokuser]"))
+            and "unexpected response from webpage request" in text
+        )
+        or "tiktok не отдал данные профиля, коллекции или ролика" in text
+    ):
+        return result(
+            "tiktok_access", "TikTok не отдал данные профиля, коллекции или ролика",
+            "TikTok временно заблокировал веб-запрос. Ссылка может быть рабочей, но сервис не вернул её содержимое приложению.",
+            "Если вы уже вошли в TikTok, нажмите обновление cookies/доступа в приложении и повторите попытку.",
+            "Если cookies не обновляются, закройте TikTok/Chrome, откройте TikTok снова и обновите доступ.",
+            "Отключите VPN или прокси либо попробуйте другую сеть.",
+            "Повторите попытку позже: TikTok часто меняет защиту веб-страниц.",
+        )
+
+    if "tiktok_no_clean_format" in text:
+        return result(
+            "tiktok_no_clean_format", "TikTok не предоставил видео без водяного знака",
+            "Приложение не будет сохранять версию с логотипом TikTok. Для этого ролика чистый поток сейчас недоступен.",
+            "Если вы уже вошли в TikTok, обновите cookies/доступ в приложении и повторите попытку.",
+            "Повторите попытку позже: набор потоков TikTok может измениться.",
+            retryable=False,
+        )
+
+    if "tiktok_empty_collection" in text:
+        return result(
+            "tiktok_collection_empty", "В коллекции TikTok нет доступных видео",
+            "TikTok вернул пустой список. Коллекция может быть пустой, приватной, удалённой или временно недоступной для веб-загрузки.",
+            "Откройте ссылку в TikTok и проверьте, видны ли ролики без ограничений.",
+            "Обновите доступ TikTok на вкладке «Аккаунты», если ролики видны только после входа.",
+            "Повторите попытку позже или попробуйте ссылку на сам профиль.",
+        )
+
     if "could not copy chrome cookie database" in text or (
         "permission denied" in text and ("network\\cookies" in text or "network/cookies" in text)
     ):
@@ -54,7 +88,7 @@ def classify_download_error(raw_message: str) -> DownloadErrorInfo:
         )
     if "http error 403" in text or "403: forbidden" in text or "403 forbidden" in text:
         return result(
-            "access_forbidden", "YouTube отказал в доступе (ошибка 403)",
+            "access_forbidden", "Сервис отказал в доступе (ошибка 403)",
             "Ссылка может быть рабочей, но сервер не разрешил получить данные видео или плейлиста.",
             "Обновите доступ к аккаунту (cookies) и повторите загрузку.",
             "Временно отключите VPN или прокси либо попробуйте другую сеть.",

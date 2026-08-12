@@ -1,11 +1,12 @@
-"""Загрузка видео и плейлистов через yt-dlp в отдельном QThread."""
 import os, time, yt_dlp
+from yt_dlp.networking.impersonate import ImpersonateTarget
 from PySide6.QtCore import QThread, Signal
 from app.logger import logger
 from app.binary_manager import get_binary_path
 from app.auth_manager import cookie_file_for_url, ensure_cookie_file_for_url, refresh_cookie_file_for_url
 from app.download_utils import (
     YtDlpLogCollector,
+    exclude_tiktok_watermarked_formats,
     format_bytes,
     is_playlist,
     playlist_entry_rows,
@@ -15,21 +16,25 @@ from app.download_utils import (
     set_sleep_prevention,
     thumbnail_url,
 )
+from app.download_artifacts import (
+    new_media_files,
+    single_output_path,
+    snapshot_output_files,
+    write_m3u,
+)
 from app.path_manager import service_output_folder
 from app.proxy_config import proxy_url_from_settings
 from app.settings_manager import APP_DATA_DIR
 from app.spotify_engine import is_spotify_url, run_spotify_download
 from app.error_messages import classify_download_error
+from app.tiktok_download import download_tiktok_clean_stream_fallback, download_tiktok_ssstik_fallback, emit_tiktok_quality
 class DownloadWorker(QThread):
-    progress = Signal(str, float, str, str)
-    status = Signal(str, str)
-    finished = Signal(str, str, bool, str)
-    info_ready = Signal(str, str, bool, int, str)
-    thumbnail_ready = Signal(str, str)
-    playlist_items_ready = Signal(str, list)
+    progress = Signal(str, float, str, str); status = Signal(str, str)
+    finished = Signal(str, str, bool, str); info_ready = Signal(str, str, bool, int, str)
+    thumbnail_ready = Signal(str, str); playlist_items_ready = Signal(str, list)
     playlist_item_progress = Signal(str, int, str, float)
     produced_files = Signal(str, list)
-
+    quality_ready = Signal(str, dict)
     def __init__(self, item_id: str, url: str, output_folder: str, settings: dict, parent=None):
         super().__init__(parent)
         self.item_id = item_id
@@ -49,12 +54,10 @@ class DownloadWorker(QThread):
         self._last_progress_time = None
         self._last_downloaded = 0
         self._ema_speed = None
-
     def cancel(self):
         self._cancelled = True
         if self._spotify_process and self._spotify_process.poll() is None:
             self._spotify_process.terminate()
-
     def run(self):
         try:
             if self.settings.get("prevent_sleep", True):
@@ -66,7 +69,6 @@ class DownloadWorker(QThread):
         finally:
             if self.settings.get("prevent_sleep", True):
                 set_sleep_prevention(False)
-
     def _progress_hook(self, d):
         if self._cancelled:
             raise yt_dlp.utils.DownloadCancelled("Отменено пользователем")
@@ -107,7 +109,6 @@ class DownloadWorker(QThread):
             self.status.emit(self.item_id, "Обработка файла...")
             if isinstance(playlist_index, int):
                 self.playlist_item_progress.emit(self.item_id, playlist_index, "Обработка...", 100.0)
-
     def _build_ydl_opts(self) -> dict:
         ffmpeg_bin = get_binary_path("ffmpeg")
         deno_bin = get_binary_path("deno")
@@ -137,6 +138,8 @@ class DownloadWorker(QThread):
                     f"bestvideo{media_filter}+bestaudio/"
                     "best[ext=mp4]/best"
                 )
+        if "tiktok.com/" in self.url.lower() and download_type == "video":
+            fmt = exclude_tiktok_watermarked_formats(fmt)
         if is_playlist(self.url):
             filename = "%(playlist_index)03d - %(title)s.%(ext)s" if self.settings.get("playlist_numbering", False) else "%(title)s.%(ext)s"
             if self.settings.get("playlist_subfolders", False) and not self.settings.get("exact_download_folder", True):
@@ -168,7 +171,13 @@ class DownloadWorker(QThread):
             "source_address": "0.0.0.0",
             "ffmpeg_location": os.path.dirname(ffmpeg_bin) if os.path.isfile(ffmpeg_bin) else None,
         }
-
+        if "tiktok.com/" in self.url.lower():
+            try:
+                opts["impersonate"] = ImpersonateTarget.from_str(
+                    str(self.settings.get("tiktok_impersonate") or "chrome-131:android-14")
+                )
+            except Exception as exc:
+                logger.warning(f"[{self.item_id}] TikTok impersonation disabled: {exc}")
         if download_type == "pictures":
             opts.update({"writethumbnail": True, "writeinfojson": False})
         elif download_type == "documents":
@@ -177,7 +186,6 @@ class DownloadWorker(QThread):
         rate_limit = rate_limit_bytes(self.settings.get("speed_limit", "unlimited"))
         if rate_limit:
             opts["ratelimit"] = rate_limit
-
         proxy_url = proxy_url_from_settings(self.settings)
         if proxy_url:
             opts["proxy"] = proxy_url
@@ -236,20 +244,6 @@ class DownloadWorker(QThread):
         )
         return info, True
 
-    def _write_m3u(self, files: list[str], playlist_title: str):
-        if not files:
-            return
-        safe_name = re.sub(r'[<>:"/\\\\|?*]+', "_", playlist_title or "playlist").strip() or "playlist"
-        m3u_path = os.path.join(self.output_folder, f"{safe_name}.m3u")
-        try:
-            with open(m3u_path, "w", encoding="utf-8") as f:
-                f.write("#EXTM3U\n")
-                for path in files:
-                    f.write(os.path.abspath(path) + "\n")
-            logger.info(f"[{self.item_id}] M3U created: {m3u_path}")
-        except Exception as e:
-            logger.warning(f"[{self.item_id}] Could not create M3U: {e}")
-
     def _friendly_error(self, raw_message: str) -> str:
         combined = " ".join([str(raw_message)] + self._ydl_logger.messages)
         return classify_download_error(combined).user_text()
@@ -287,39 +281,35 @@ class DownloadWorker(QThread):
         self._ydl_logger = YtDlpLogCollector(self.item_id)
         return True
 
-    def _snapshot_output_files(self) -> set[str]:
-        try:
-            files = set()
-            for root, _, names in os.walk(self.output_folder):
-                for name in names:
-                    path = os.path.join(root, name)
-                    if os.path.isfile(path):
-                        files.add(path)
-            return files
-        except Exception:
-            return set()
+    def _finish_single_success(self, filepath: str):
+        self._emit_tiktok_quality_if_needed([filepath])
+        self.produced_files.emit(self.item_id, [filepath])
+        self.status.emit(self.item_id, "Завершено")
+        self.finished.emit(self.item_id, filepath, True, "")
 
-    def _new_media_files(self, before: set[str]) -> list[str]:
-        media_exts = {".mp4", ".mkv", ".webm", ".m4a", ".mp3", ".opus", ".jpg", ".jpeg", ".png", ".webp", ".json", ".description", ".vtt", ".srt"}
-        after = self._snapshot_output_files()
-        return sorted(
-            path for path in after - before
-            if os.path.splitext(path)[1].lower() in media_exts and os.path.getsize(path) > 0
-        )
+    def _emit_tiktok_quality_if_needed(self, filepaths: list[str]):
+        if "tiktok.com/" in self.url.lower():
+            emit_tiktok_quality(self, filepaths)
 
-    def _single_output_path(self, ydl, info) -> str:
-        filename = ydl.prepare_filename(info)
-        base = os.path.splitext(filename)[0]
-        candidates = [
-            base + ".mp4",
-            filename,
-            base + ".mkv",
-            base + ".webm",
-        ]
-        for candidate in candidates:
-            if os.path.isfile(candidate) and os.path.getsize(candidate) > 0:
-                return candidate
-        return base + ".mp4"
+    def _try_tiktok_fallbacks(self, opts: dict, title: str | None = None, *, profile: bool = True) -> bool:
+        attempts = []
+        if profile:
+            attempts.append(("profile", lambda: download_tiktok_clean_stream_fallback(self, opts)))
+        attempts.append(("ssstik", lambda: download_tiktok_ssstik_fallback(self, title)))
+        for name, attempt in attempts:
+            try:
+                fallback = attempt()
+                if fallback:
+                    filepath, _title = fallback
+                    self._finish_single_success(filepath)
+                    return True
+            except yt_dlp.utils.DownloadCancelled:
+                self.status.emit(self.item_id, "Отменено")
+                self.finished.emit(self.item_id, "", False, "Отменено пользователем")
+                return True
+            except Exception as fallback_exc:
+                logger.warning(f"[{self.item_id}] TikTok {name} fallback failed: {fallback_exc}")
+        return False
 
     def _download(self):
         if is_spotify_url(self.url):
@@ -344,12 +334,16 @@ class DownloadWorker(QThread):
                     info = ydl.extract_info(self.url, download=False)
                     fast_playlist = False
             except Exception as e:
+                if self._try_tiktok_fallbacks(opts):
+                    return
                 if self._refresh_cookies_and_retry(str(e)):
                     self._download()
                     return
                 raise RuntimeError(self._friendly_error(f"Не удалось получить данные ссылки: {e}"))
             
             if info is None:
+                if self._try_tiktok_fallbacks(opts):
+                    return
                 raise RuntimeError(self._friendly_error("Ссылка недоступна или заблокирована"))
             
             pl = is_playlist(self.url) or info.get("_type") == "playlist"
@@ -375,7 +369,7 @@ class DownloadWorker(QThread):
             self.status.emit(self.item_id, "Загрузка...")
             logger.info(f"[{self.item_id}] Downloading {title} (Плейлист: {pl}, видео: {count}, размер: {size_str})")
             
-            files_before = self._snapshot_output_files()
+            files_before = snapshot_output_files(self.output_folder)
             download_error = None
             try:
                 result = ydl.download([self.url])
@@ -395,9 +389,11 @@ class DownloadWorker(QThread):
                 f"[{self.item_id}] yt-dlp finished with warnings={len(self._ydl_logger.messages)} "
                 f"errors={len(self._ydl_logger.errors)} last_error={download_error or 'none'}"
             )
+            if "tiktok.com/" in self.url.lower() and download_error and "requested format is not available" in download_error.lower():
+                download_error = f"TIKTOK_NO_CLEAN_FORMAT: {download_error}"
             
             if pl:
-                new_files = remove_merged_audio_sidecars(self._new_media_files(files_before), self.settings.get("download_type", "video"))
+                new_files = remove_merged_audio_sidecars(new_media_files(self.output_folder, files_before), self.settings.get("download_type", "video"))
                 if download_error and not new_files:
                     if self._refresh_cookies_and_retry(download_error):
                         self._download()
@@ -409,19 +405,23 @@ class DownloadWorker(QThread):
                         f"Saved files: {len(new_files)}. Last issue: {download_error}"
                     )
                 if self.settings.get("create_m3u", False):
-                    self._write_m3u(new_files, title)
+                    write_m3u(self.output_folder, new_files, title)
+                self._emit_tiktok_quality_if_needed(new_files)
                 self.produced_files.emit(self.item_id, new_files)
                 filepath = self.output_folder
             else:
-                generated_files = remove_merged_audio_sidecars(self._new_media_files(files_before), self.settings.get("download_type", "video"))
-                filepath = generated_files[0] if self.settings.get("download_type") in {"pictures", "documents"} and generated_files else self._single_output_path(ydl, info)
+                generated_files = remove_merged_audio_sidecars(new_media_files(self.output_folder, files_before), self.settings.get("download_type", "video"))
+                filepath = generated_files[0] if self.settings.get("download_type") in {"pictures", "documents"} and generated_files else single_output_path(ydl, info)
                 if download_error:
+                    if self._try_tiktok_fallbacks(opts, title, profile=False):
+                        return
                     if self._refresh_cookies_and_retry(download_error):
                         self._download()
                         return
                     raise RuntimeError(self._friendly_error(f"Не удалось загрузить видео: {download_error}"))
                 if not os.path.isfile(filepath):
                     raise RuntimeError(self._friendly_error("Загрузка закончилась без готового файла"))
+                self._emit_tiktok_quality_if_needed([filepath])
                 self.produced_files.emit(self.item_id, [filepath])
             
             logger.info(f"[{self.item_id}] Download process finished: {filepath}")

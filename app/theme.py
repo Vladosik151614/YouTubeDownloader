@@ -336,6 +336,44 @@ QFrame#smart_card {{
     border: 1px solid {p["border"]};
     border-radius: 7px;
 }}
+QFrame#tiktok_card {{
+    background: {p["panel"]};
+    border: 1px solid {p["border"]};
+    border-radius: 9px;
+}}
+QFrame#tiktok_card:hover {{
+    border-color: {p["accent"]};
+}}
+QFrame#tiktok_cover {{
+    background: {p["control_pressed"]};
+    border: none;
+    border-radius: 7px;
+}}
+QFrame#tiktok_playlists_panel, QFrame#queue_section {{
+    background: {p["panel_alt"]};
+    border: 1px solid {p["border"]};
+    border-radius: 7px;
+}}
+QLabel#source_quality {{
+    color: {p["info"]};
+    border: none;
+}}
+QToolButton {{
+    background: {p["accent"]};
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    min-height: 30px;
+    padding: 4px 10px;
+    font-weight: 700;
+}}
+QToolButton:hover {{
+    background: {p["accent_hover"]};
+}}
+QToolButton::menu-button {{
+    border-left: 1px solid {p["accent_alt"]};
+    width: 24px;
+}}
 QLabel#mini_label {{
     color: {p["muted"]};
     font-size: 11px;
