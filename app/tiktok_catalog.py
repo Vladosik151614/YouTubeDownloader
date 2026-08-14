@@ -5,10 +5,7 @@ from PySide6.QtCore import QTimer, Qt, QUrl, Signal
 from PySide6.QtGui import QPixmap
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest
-from PySide6.QtWidgets import (
-    QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea,
-    QSizePolicy, QToolButton, QVBoxLayout, QWidget,
-)
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea, QSizePolicy, QToolButton, QVBoxLayout, QWidget
 
 from app.logger import logger
 from app.error_messages import classify_download_error
@@ -128,6 +125,10 @@ class TikTokCatalogWidget(QWidget):
     def _load_catalog(self):
         self.worker = TikTokCatalogWorker(self.url, self.settings, self)
         self.worker.loaded.connect(self._on_loaded)
+        self.worker.quality_resolved.connect(
+            lambda url, quality: self.cards_by_url.get(url)
+            and self.cards_by_url[url].apply_resolved_quality(quality)
+        )
         self.worker.failed.connect(self._on_failed)
         self.worker.start()
 
@@ -137,6 +138,7 @@ class TikTokCatalogWidget(QWidget):
         size_mode = "medium"
         for entry in entries:
             card = TikTokVideoCard(entry, size_mode, self.card_grid)
+            card.mark_quality_loading()
             card.hover_started.connect(self._schedule_preview)
             card.hover_ended.connect(self._stop_preview)
             card.download_requested.connect(self._download_one)
@@ -222,9 +224,7 @@ class TikTokCatalogWidget(QWidget):
         while self._thumb_queue and len(self._thumb_requests) < 6:
             card, url, kind = self._thumb_queue.pop(0)
             request = QNetworkRequest(QUrl(url))
-            request.setRawHeader(
-                b"User-Agent", b"Mozilla/5.0 Chrome/131 Safari/537.36"
-            )
+            request.setRawHeader(b"User-Agent", b"Mozilla/5.0 Chrome/131 Safari/537.36")
             request.setRawHeader(b"Referer", b"https://www.tiktok.com/")
             reply = self.network.get(request)
             self._thumb_requests[reply] = (card, kind)

@@ -81,8 +81,9 @@ class ConverterIntegrationTests(unittest.TestCase):
             worker = ConvertWorker(source, {
                 "default_codec": "h264",
                 "container": "mp4",
-                "download_quality": "180",
-                "fps_limit": "best",
+                "download_quality": "60",
+                "upscale_target": "180",
+                "fps_limit": "20",
                 "upscale_to_profile": True,
                 "encoding_mode": "cpu_only",
                 "video_encoder": "libx264",
@@ -94,6 +95,7 @@ class ConverterIntegrationTests(unittest.TestCase):
             self.assertTrue(result and result[0][2], result)
             info = probe_video_info(result[0][1])
             self.assertEqual(min(info["width"], info["height"]), 180)
+            self.assertGreaterEqual(info["fps"], 19.0)
 
 
 if __name__ == "__main__":

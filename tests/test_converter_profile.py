@@ -14,6 +14,7 @@ class ConverterProfileTests(unittest.TestCase):
                 "default_codec": "original",
                 "container": "mp4",
                 "download_quality": "1080",
+                "upscale_target": "1440",
                 "fps_limit": "60",
             }
             self.assertNotIn(
@@ -25,6 +26,11 @@ class ConverterProfileTests(unittest.TestCase):
                 "upscale",
                 converter.profile_conversion_reasons("video.mp4", with_upscale),
             )
+            self.assertIn(
+                "fps_upscale",
+                converter.profile_conversion_reasons("video.mp4", with_upscale),
+            )
+            self.assertEqual(converter.target_resolution(with_upscale), "1440")
         finally:
             converter.probe_video_info = original_probe
 

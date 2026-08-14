@@ -13,7 +13,7 @@ from app.accounts_page import AccountsPage
 from app.history_store import add_history_entry
 from app.queue_widget import QueueWidget
 from app.downloader import DownloadWorker
-from app.converter import ConvertWorker, has_video_stream, needs_profile_conversion, normalized_target_codec, probe_codec
+from app.converter import ConvertWorker, has_video_stream, needs_profile_conversion, normalized_target_codec, probe_codec, target_resolution
 from app.toggle_switch import ToggleSwitch
 from app.logger import logger
 from app.updater import AppUpdateWorker, UpdateWorker
@@ -29,11 +29,18 @@ def owner_tools_available():
 OwnerToolsPage = None
 from app.process_utils import hidden_subprocess_kwargs
 from app.sidebar_button import SidebarNavButton
+from app.profile_controls import switch_card
 from app.fix_report_page import APP_VERSION, FixReportPage
 from app.tiktok_catalog import is_tiktok_collection_url
 from app.main_window_tiktok import (
     close_tiktok_catalog, open_tiktok_catalog,
     queue_tiktok_download, refresh_queue_visibility,
+)
+from app.main_window_profile import (
+    on_quick_codec_changed, on_quick_container_changed,
+    on_quick_encoder_changed, on_quick_numbering_toggled,
+    on_quick_quality_changed, on_quick_upscale_target_changed,
+    on_quick_upscale_toggled, save_quick_setting, sync_quick_controls,
 )
 from app.theme import app_qss
 class MainWindow(QMainWindow):
@@ -41,6 +48,15 @@ class MainWindow(QMainWindow):
     _queue_tiktok_download = queue_tiktok_download
     _close_tiktok_catalog = close_tiktok_catalog
     _refresh_queue_visibility = refresh_queue_visibility
+    _sync_quick_controls = sync_quick_controls
+    _save_quick_setting = save_quick_setting
+    _on_quick_quality_changed = on_quick_quality_changed
+    _on_quick_container_changed = on_quick_container_changed
+    _on_quick_encoder_changed = on_quick_encoder_changed
+    _on_quick_codec_changed = on_quick_codec_changed
+    _on_quick_numbering_toggled = on_quick_numbering_toggled
+    _on_quick_upscale_toggled = on_quick_upscale_toggled
+    _on_quick_upscale_target_changed = on_quick_upscale_target_changed
     def __init__(self):
         super().__init__()
         self.settings = load_settings()
@@ -65,7 +81,6 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("YouTube Downloader")
         self.setMinimumSize(1080, 700)
         self.resize(1360, 860)
-        # Устанавливаем иконку окна из файла youtube.ico если он есть
         ico_path = get_resource_path("youtube.ico")
         if os.path.isfile(ico_path):
             self.setWindowIcon(QIcon(ico_path))
@@ -160,7 +175,7 @@ class MainWindow(QMainWindow):
         hdr.setObjectName("section_title")
         hdr.setFont(QFont("Segoe UI", 17, QFont.Weight.Bold))
         layout.addWidget(hdr)
-        subtitle = QLabel("Поддержка видео, музыки, плейлистов, каналов и клипов")
+        subtitle = QLabel("Видео, музыка, плейлисты")
         subtitle.setObjectName("subtle")
         layout.addWidget(subtitle)
         tool_band = QFrame()
@@ -177,7 +192,7 @@ class MainWindow(QMainWindow):
         paste_btn.clicked.connect(self._paste_from_clipboard)
         top_actions.addWidget(paste_btn)
         self.url_edit = QLineEdit()
-        self.url_edit.setPlaceholderText("Вставьте ссылку на видео, аудио, плейлист, канал или клип...")
+        self.url_edit.setPlaceholderText("Вставьте ссылку на видео, плейлист, канал или клип...")
         self.url_edit.setMinimumHeight(38)
         self.url_edit.returnPressed.connect(self._add_to_queue)
         top_actions.addWidget(self.url_edit, 1)
@@ -191,7 +206,7 @@ class MainWindow(QMainWindow):
         preview_btn.clicked.connect(self._preview_link)
         top_actions.addWidget(preview_btn)
         tool_layout.addLayout(top_actions)
-        self.preview_label = QLabel("Проверка ссылки покажет сервис, тип, качество, FPS и субтитры.")
+        self.preview_label = QLabel("Проверка покажет сервис, тип, качество и FPS.")
         self.preview_label.setObjectName("subtle")
         self.preview_label.setWordWrap(True)
         tool_layout.addWidget(self.preview_label)
@@ -225,16 +240,21 @@ class MainWindow(QMainWindow):
         self.quick_codec_combo.addItems(["Оригинал", "H.264", "VP9", "AV1"])
         self.quick_codec_combo.currentIndexChanged.connect(self._on_quick_codec_changed)
         smart_row.addWidget(self._mini_combo("Кодек", self.quick_codec_combo))
-        numbering_card = QFrame()
-        numbering_card.setObjectName("smart_card")
-        numbering_layout = QHBoxLayout(numbering_card)
-        numbering_layout.setContentsMargins(10, 8, 10, 8)
+        self.quick_upscale_switch = ToggleSwitch(checked=self.settings.get("upscale_to_profile", False))
+        self.quick_upscale_switch.setAccessibleName("Апскейл")
+        self.quick_upscale_switch.toggled.connect(self._on_quick_upscale_toggled)
+        smart_row.addWidget(switch_card(
+            "Апскейл", self.quick_upscale_switch,
+            "Обработка до профиля после скачивания.",
+        ))
+        self.quick_upscale_target_combo = QComboBox()
+        self.quick_upscale_target_combo.addItems(["2K", "4K"])
+        self.quick_upscale_target_combo.currentIndexChanged.connect(self._on_quick_upscale_target_changed)
+        smart_row.addWidget(self._mini_combo("Цель", self.quick_upscale_target_combo, 96))
         self.quick_numbering_switch = ToggleSwitch(checked=self.settings.get("playlist_numbering", False))
         self.quick_numbering_switch.setAccessibleName("Нумерация файлов плейлиста")
         self.quick_numbering_switch.toggled.connect(self._on_quick_numbering_toggled)
-        numbering_layout.addWidget(self.quick_numbering_switch)
-        numbering_layout.addWidget(QLabel("Нумерация"))
-        smart_row.addWidget(numbering_card)
+        smart_row.addWidget(switch_card("Нумерация", self.quick_numbering_switch))
         smart_row.addStretch()
         tool_layout.addLayout(smart_row)
         folder_row = QHBoxLayout()
@@ -390,80 +410,16 @@ class MainWindow(QMainWindow):
         text = QApplication.clipboard().text().strip()
         if text:
             self.url_edit.setText(text)
-            self.status_label.setText("Ссылка вставлена. Нажмите «Скачать», чтобы начать загрузку.")
+            self.status_label.setText("Ссылка вставлена.")
         else:
             self.status_label.setText("Буфер обмена пуст")
-    def _sync_quick_controls(self):
-        if hasattr(self, "quick_quality_combo"):
-            quality_idx = {"best": 0, "2160": 1, "1440": 2, "1080": 3, "720": 4, "480": 5}.get(
-                str(self.settings.get("download_quality", "1080")), 3
-            )
-            self.quick_quality_combo.blockSignals(True)
-            self.quick_quality_combo.setCurrentIndex(quality_idx)
-            self.quick_quality_combo.blockSignals(False)
-        if hasattr(self, "quick_container_combo"):
-            container_idx = {"mp4": 0, "mkv": 1, "webm": 2}.get(self.settings.get("container", "mp4"), 0)
-            self.quick_container_combo.blockSignals(True)
-            self.quick_container_combo.setCurrentIndex(container_idx)
-            self.quick_container_combo.blockSignals(False)
-        if hasattr(self, "quick_encoder_combo"):
-            encoder_idx = {
-                "auto": 0,
-                "h264_nvenc": 1,
-                "h264_qsv": 2,
-                "h264_amf": 3,
-                "libx264": 4,
-            }.get(self.settings.get("video_encoder", "auto"), 0)
-            self.quick_encoder_combo.blockSignals(True)
-            self.quick_encoder_combo.setCurrentIndex(encoder_idx)
-            self.quick_encoder_combo.blockSignals(False)
-        if hasattr(self, "quick_codec_combo"):
-            codec_idx = {"original": 0, "h264": 1, "vp9": 2, "av1": 3}.get(
-                normalized_target_codec(self.settings), 0
-            )
-            self.quick_codec_combo.blockSignals(True)
-            self.quick_codec_combo.setCurrentIndex(codec_idx)
-            self.quick_codec_combo.blockSignals(False)
-        if hasattr(self, "quick_numbering_switch"):
-            self.quick_numbering_switch.blockSignals(True)
-            self.quick_numbering_switch.setChecked(self.settings.get("playlist_numbering", False))
-            self.quick_numbering_switch.blockSignals(False)
-    def _save_quick_setting(self, key: str, value: str):
-        self.settings[key] = value
-        if key == "video_encoder":
-            self.settings["encoding_mode"] = "cpu_only" if value == "libx264" else "gpu_auto"
-            self.settings["prefer_gpu"] = value != "libx264"
-        save_settings(self.settings)
-        if hasattr(self, "settings_page"):
-            self.settings_page.settings = dict(self.settings)
-            self.settings_page._load_values()
-    def _on_quick_quality_changed(self, index: int):
-        self._save_quick_setting("download_quality", {0: "best", 1: "2160", 2: "1440", 3: "1080", 4: "720", 5: "480"}.get(index, "1080"))
-    def _on_quick_container_changed(self, index: int):
-        self._save_quick_setting("container", {0: "mp4", 1: "mkv", 2: "webm"}.get(index, "mp4"))
-    def _on_quick_encoder_changed(self, index: int):
-        self._save_quick_setting("video_encoder", {0: "auto", 1: "h264_nvenc", 2: "h264_qsv", 3: "h264_amf", 4: "libx264"}.get(index, "auto"))
-    def _on_quick_codec_changed(self, index: int):
-        codec = {0: "original", 1: "h264", 2: "vp9", 3: "av1"}.get(index, "original")
-        self.settings["default_codec"] = codec
-        self.settings["auto_convert"] = codec != "original"
-        save_settings(self.settings)
-        if hasattr(self, "settings_page"):
-            self.settings_page.settings = dict(self.settings)
-            self.settings_page._load_values()
-    def _on_quick_numbering_toggled(self, checked: bool):
-        self.settings["playlist_numbering"] = bool(checked)
-        save_settings(self.settings)
-        if hasattr(self, "settings_page"):
-            self.settings_page.settings = dict(self.settings)
-            self.settings_page._load_values()
     def _add_to_queue(self):
         url = self.url_edit.text().strip()
         if not url:
             self.status_label.setText("Введите URL!")
             return
         if not (url.startswith("http://") or url.startswith("https://")):
-            QMessageBox.warning(self, "Ошибка", "Введите корректный URL (http:// или https://)")
+            QMessageBox.warning(self, "Ошибка", "Введите URL с http:// или https://")
             return
         if is_tiktok_collection_url(url):
             added = self._open_tiktok_catalog(url)
@@ -740,7 +696,7 @@ class MainWindow(QMainWindow):
         )
         profile_label = (
             f"{settings.get('container', 'mp4').upper()} · {codec_label} · "
-            f"{settings.get('download_quality', '1080')}p · "
+            f"{target_resolution(settings)}p · "
             f"до {settings.get('fps_limit', '60')} FPS"
         )
         should_convert = True

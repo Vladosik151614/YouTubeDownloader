@@ -2,19 +2,19 @@
 
 All notable public release changes should be documented here.
 
-## 0.1.5 - 2026-08-12
+## 0.1.5 - 2026-08-14
 
 - Embedded TikTok browsing into the first download screen without a separate page or permanent right preview panel.
 - Added responsive four-column cards with real covers, per-card expandable Download actions and selected/full profile or playlist actions.
 - Added muted animated hover preview directly inside each card cover.
-- Added per-card source resolution, FPS and codec labels with 1080p, 2K and 4K recognition.
+- Added per-card verified source resolution, FPS and codec labels; direct TikTok download is capped at Full HD/60 FPS where available.
 - Applied one shared resolution/FPS/container/codec/encoder profile to all video services; defaults remain 1080p/60 FPS.
 - Extended verified conversion to enforce container, resolution and FPS in addition to codec, including MOV-to-MP4 profile processing.
-- Added an explicit opt-in upscale setting; it is off by default and does not replace real source-quality detection.
+- Added an explicit opt-in upscale switch plus 2K/4K target selector to the main profile row; it runs after download and does not replace real source-quality detection.
 - Added a documented TikTok quality test table covering provider, quality, FPS, codec and watermark status.
 - Kept TikTok downloads strictly filtered against standard TikTok watermarked formats.
 - Added specific TikTok challenge/cookies guidance.
-- Publication time: `2026-08-12 15:02:00 +02:00`.
+- Publication time: `2026-08-14 05:45:07 +02:00`.
 
 ## 0.1.4 - 2026-08-10
 

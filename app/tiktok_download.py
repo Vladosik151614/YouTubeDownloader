@@ -10,9 +10,20 @@ import yt_dlp
 from curl_cffi import requests
 
 from app.logger import logger
-from app.tiktok_external import ssstik_video_candidates, tikwm_video_candidates
+from app.tiktok_external import tikwm_video_candidates
 from app.tiktok_metadata import _profile_source_data
-from app.tiktok_quality import probe_file_quality, quality_score
+from app.tiktok_quality import download_quality_score, probe_file_quality, quality_score
+
+
+def _emit_signal(worker, signal_name: str, *args) -> None:
+    """Emit UI status/progress safely without invalidating a downloaded candidate."""
+    signal = getattr(worker, signal_name, None)
+    if signal is None or not hasattr(signal, "emit"):
+        return
+    try:
+        signal.emit(*args)
+    except Exception as exc:
+        logger.warning(f"[{getattr(worker, 'item_id', '')}] TikTok signal {signal_name} failed: {exc}")
 
 
 def emit_tiktok_quality(worker, filepaths: list[str]):
@@ -31,11 +42,11 @@ def emit_tiktok_quality(worker, filepaths: list[str]):
         if not best_quality or quality_score(quality) > quality_score(best_quality):
             best_quality = quality
     if best_quality:
-        worker.quality_ready.emit(worker.item_id, best_quality)
+        _emit_signal(worker, "quality_ready", worker.item_id, best_quality)
         label = best_quality.get("label") or "качество проверено"
         if best_quality.get("confidence") == "limited":
             label = f"{label} · HD не подтверждён"
-        worker.status.emit(worker.item_id, f"TikTok скачан: {label}")
+        _emit_signal(worker, "status", worker.item_id, f"TikTok скачан: {label}")
 
 
 def _safe_filename(folder: str, title: str, ext: str = ".mp4") -> str:
@@ -87,7 +98,9 @@ def _download_stream(
                 downloaded += len(chunk)
                 now = time.monotonic()
                 if total and now - last_emit >= 0.25:
-                    worker.progress.emit(
+                    _emit_signal(
+                        worker,
+                        "progress",
                         worker.item_id,
                         min(99.0, downloaded / total * 100),
                         "—",
@@ -104,7 +117,7 @@ def _download_stream(
                 pass
     if not os.path.isfile(filepath) or os.path.getsize(filepath) <= 0:
         raise RuntimeError("Загрузка TikTok закончилась без готового файла")
-    worker.progress.emit(worker.item_id, 100.0, "—", "—")
+    _emit_signal(worker, "progress", worker.item_id, 100.0, "—", "—")
     return filepath
 
 
@@ -150,7 +163,7 @@ def _download_best_candidate(worker, candidates: list[dict], final_title: str) -
             if os.path.exists(temp_path):
                 os.remove(temp_path)
             label = str(candidate.get("label") or candidate.get("provider") or "TikTok")
-            worker.status.emit(worker.item_id, f"Проверяю качество TikTok: {label}...")
+            _emit_signal(worker, "status", worker.item_id, f"Проверяю качество TikTok: {label}...")
             try:
                 _download_stream(
                     worker,
@@ -170,9 +183,9 @@ def _download_best_candidate(worker, candidates: list[dict], final_title: str) -
                     f"[{worker.item_id}] TikTok candidate {label}: "
                     f"{quality.get('label')} size={quality.get('size')}"
                 )
-                if best is None or quality_score(quality) > quality_score(best[1]):
+                if best is None or download_quality_score(quality) > download_quality_score(best[1]):
                     best = (temp_path, quality)
-                    worker.status.emit(worker.item_id, f"Лучший TikTok-кандидат: {_quality_display(quality)}")
+                    _emit_signal(worker, "status", worker.item_id, f"Лучший TikTok-кандидат: {_quality_display(quality)}")
             except yt_dlp.utils.DownloadCancelled:
                 raise
             except Exception as exc:
@@ -193,9 +206,8 @@ def _download_best_candidate(worker, candidates: list[dict], final_title: str) -
                 except OSError:
                     pass
         best[1]["filepath"] = final_path
-        worker.status.emit(worker.item_id, f"Скачано TikTok: {_quality_display(best[1])}")
-        if hasattr(worker, "quality_ready"):
-            worker.quality_ready.emit(worker.item_id, best[1])
+        _emit_signal(worker, "status", worker.item_id, f"Скачано TikTok: {_quality_display(best[1])}")
+        _emit_signal(worker, "quality_ready", worker.item_id, best[1])
         return final_path, _quality_display(best[1])
     except Exception:
         for temp_path, _quality in downloaded:
@@ -207,19 +219,18 @@ def _download_best_candidate(worker, candidates: list[dict], final_title: str) -
         raise
 
 
-def download_tiktok_ssstik_fallback(worker, title: str | None = None) -> tuple[str, str] | None:
-    """Try public no-watermark MP4 fallbacks for a direct TikTok video."""
+def download_tiktok_external_quality_fallback(worker, title: str | None = None) -> tuple[str, str] | None:
+    """Try independent no-watermark MP4 fallbacks for a direct TikTok video."""
     if "tiktok.com/" not in worker.url.lower() or "/video/" not in worker.url.lower():
         return None
     if worker.settings.get("download_type", "video") != "video":
         return None
-    worker.status.emit(worker.item_id, "TikTok заблокировал прямой поток, пробую HD/no-watermark fallback...")
-    logger.info(f"[{worker.item_id}] TikTok external fallback started")
+    _emit_signal(worker, "status", worker.item_id, "TikTok заблокировал прямой поток, ищу лучший HD/no-watermark кандидат...")
+    logger.info(f"[{worker.item_id}] TikTok independent external quality fallback started")
     candidates = []
     errors = []
     for provider_name, provider in (
         ("TikWM", tikwm_video_candidates),
-        ("ssstik", ssstik_video_candidates),
     ):
         try:
             provider_candidates = provider(worker.url)
@@ -231,17 +242,17 @@ def download_tiktok_ssstik_fallback(worker, title: str | None = None) -> tuple[s
             errors.append(f"{provider_name}: {exc}")
             logger.warning(f"[{worker.item_id}] {provider_name} fallback discovery failed: {exc}")
     if not candidates:
-        detail = "; ".join(errors) if errors else "внешние сервисы не отдали ссылку"
-        raise RuntimeError(f"Не удалось получить внешний TikTok MP4 без водяного знака: {detail}")
+        detail = "; ".join(errors) if errors else "независимый HD-источник не отдал ссылку"
+        raise RuntimeError(f"Не удалось получить TikTok MP4 без водяного знака: {detail}")
     candidates = sorted(candidates, key=lambda item: int(item.get("priority") or 0), reverse=True)
     video_id_match = re.search(r"/video/(\d+)", worker.url)
     video_id = video_id_match.group(1) if video_id_match else "video"
     final_title = title or f"TikTok {video_id}"
-    worker.info_ready.emit(worker.item_id, final_title, False, 1, "—")
-    worker.status.emit(worker.item_id, "Загрузка TikTok через no-watermark fallback...")
+    _emit_signal(worker, "info_ready", worker.item_id, final_title, False, 1, "—")
+    _emit_signal(worker, "status", worker.item_id, "Загрузка TikTok через no-watermark fallback...")
     filepath, label = _download_best_candidate(worker, candidates, final_title)
     if label:
-        worker.status.emit(worker.item_id, f"TikTok скачан в лучшем доступном качестве: {label}")
+        _emit_signal(worker, "status", worker.item_id, f"TikTok скачан в лучшем доступном качестве: {label}")
     return filepath, final_title
 
 
@@ -259,7 +270,7 @@ def download_tiktok_clean_stream_fallback(worker, opts: dict) -> tuple[str, str]
         "progress_hooks": [],
         "playlist_items": None,
     })
-    worker.status.emit(worker.item_id, "TikTok заблокировал прямую ссылку, ищу чистый поток через профиль...")
+    _emit_signal(worker, "status", worker.item_id, "TikTok заблокировал прямую ссылку, ищу чистый поток через профиль...")
     logger.info(f"[{worker.item_id}] TikTok direct fallback through profile: @{username}/{video_id}")
     with yt_dlp.YoutubeDL(fallback_opts) as ydl:
         profile_info = ydl.extract_info(profile_url, download=False) or {}
@@ -282,15 +293,14 @@ def download_tiktok_clean_stream_fallback(worker, opts: dict) -> tuple[str, str]
     headers.setdefault("User-Agent", "Mozilla/5.0 Chrome/131 Safari/537.36")
     headers.setdefault("Referer", "https://www.tiktok.com/")
     filepath = _safe_filename(worker.output_folder, title, ".mp4")
-    worker.info_ready.emit(worker.item_id, title, False, 1, "—")
-    worker.status.emit(worker.item_id, "Загрузка чистого потока TikTok...")
+    _emit_signal(worker, "info_ready", worker.item_id, title, False, 1, "—")
+    _emit_signal(worker, "status", worker.item_id, "Загрузка чистого потока TikTok...")
     _download_stream(
         worker, stream_url, headers, filepath, impersonate="chrome131_android"
     )
     quality = probe_file_quality(filepath)
     if quality.get("label"):
-        worker.status.emit(worker.item_id, f"TikTok скачан: {_quality_display(quality)}")
-        if hasattr(worker, "quality_ready"):
-            quality["filepath"] = filepath
-            worker.quality_ready.emit(worker.item_id, quality)
+        _emit_signal(worker, "status", worker.item_id, f"TikTok скачан: {_quality_display(quality)}")
+        quality["filepath"] = filepath
+        _emit_signal(worker, "quality_ready", worker.item_id, quality)
     return filepath, title

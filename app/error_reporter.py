@@ -16,9 +16,10 @@ def sanitize_text(value: str) -> str:
     home = os.path.expanduser("~").replace("\\", "/")
     text = str(value or "").replace("\\", "/")
     text = text.replace(home, "%USERPROFILE%")
-    text = re.sub(r"(?i)(password|passwd|token|secret|cookie|api[_-]?key)=\\S+", r"\\1=<redacted>", text)
-    text = re.sub(r"(?i)(password|passwd|token|secret|cookie|api[_-]?key)['\"]?\\s*[:=]\\s*['\"][^'\"]+['\"]", r"\\1=<redacted>", text)
-    text = re.sub(r"C:/Users/[^/\\s\"']+", "%USERPROFILE%", text)
+    text = re.sub(r"(?i)(password|passwd|token|secret|cookie|api[_-]?key)=\S+", r"\1=<redacted>", text)
+    text = re.sub(r"(?i)(password|passwd|token|secret|cookie|api[_-]?key)['\"]?\s*[:=]\s*['\"][^'\"]+['\"]", r"\1=<redacted>", text)
+    text = re.sub(r"(?i)(https?://)[^\s/]+@", r"\1<redacted>@", text)
+    text = re.sub(r"C:/Users/[^/\s\"']+", "%USERPROFILE%", text)
     return text
 
 

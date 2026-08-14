@@ -31,6 +31,11 @@ class TikTokVideoCard(QFrame):
         super().__init__(parent)
         self.entry = entry
         self._cover_pixmap = QPixmap()
+        self._quality_loading_base = ""
+        self._quality_loading_step = 0
+        self._quality_loading_timer = QTimer(self)
+        self._quality_loading_timer.setInterval(450)
+        self._quality_loading_timer.timeout.connect(self._animate_quality_loading)
         self.setObjectName("tiktok_card")
         self.setMouseTracking(True)
         self._build_ui()
@@ -218,12 +223,59 @@ class TikTokVideoCard(QFrame):
         self.entry["source_quality"] = dict(quality or {})
         label = str((quality or {}).get("label") or "")
         confidence = str((quality or {}).get("confidence") or "")
+        self._stop_quality_loading()
+        if (quality or {}).get("probe_failed"):
+            text = (
+                f"Не удалось подтвердить HD · предварительно: {label}"
+                if label else "Качество не подтверждено"
+            )
+            self.quality_label.setText(text)
+            return
+        if (quality or {}).get("checking") or confidence == "reported":
+            self._start_quality_loading(label)
+            return
         if label:
             prefix = "Доступно" if confidence == "limited" else "Макс. доступно"
             suffix = " · HD не подтверждён" if confidence == "limited" else ""
             self.quality_label.setText(f"{prefix}: {label}{suffix}")
         else:
-            self.quality_label.setText("Доступное качество: проверяется…")
+            self._start_quality_loading("")
+
+    def _start_quality_loading(self, label: str):
+        self._quality_loading_base = (
+            f"Проверяем реальное качество · пока видно: {label}"
+            if label else "Проверяем реальное качество"
+        )
+        self._quality_loading_step = 0
+        self._animate_quality_loading()
+        self._quality_loading_timer.start()
+
+    def _stop_quality_loading(self):
+        if getattr(self, "_quality_loading_timer", None):
+            self._quality_loading_timer.stop()
+
+    def _animate_quality_loading(self):
+        dots = "." * (self._quality_loading_step % 4)
+        self._quality_loading_step += 1
+        self.quality_label.setText(f"{self._quality_loading_base}{dots}")
+
+    def mark_quality_loading(self):
+        current = dict(self.entry.get("source_quality") or {})
+        current["checking"] = True
+        current.pop("probe_failed", None)
+        self.set_source_quality(current)
+
+    def mark_quality_probe_failed(self):
+        current = dict(self.entry.get("source_quality") or {})
+        current.pop("checking", None)
+        current["probe_failed"] = True
+        self.set_source_quality(current)
+
+    def apply_resolved_quality(self, quality: dict):
+        if (quality or {}).get("probe_failed"):
+            self.mark_quality_probe_failed()
+        else:
+            self.set_source_quality(quality)
 
     def show_preview(self, message: str = "Предпросмотр без звука"):
         self.cover_stack.setCurrentWidget(self.video_widget)
@@ -233,7 +285,6 @@ class TikTokVideoCard(QFrame):
         self.stop_animated_preview()
         self.cover_stack.setCurrentWidget(self.cover_label)
         self.preview_hint.setText(message)
-
 
 class TikTokCardGrid(QWidget):
     """Responsive grid capped at four cards per row."""

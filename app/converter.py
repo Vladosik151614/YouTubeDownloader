@@ -87,6 +87,13 @@ def normalized_target_container(settings: dict) -> str:
     return value if value in {"mp4", "mkv", "webm"} else "mp4"
 
 
+def target_resolution(settings: dict) -> str:
+    if settings.get("upscale_to_profile", False):
+        value = str(settings.get("upscale_target", "1440"))
+        return value if value.isdigit() else "1440"
+    return str(settings.get("download_quality", "1080"))
+
+
 def profile_conversion_reasons(filepath: str, settings: dict) -> list[str]:
     """Return exact active-profile mismatches requested by the active profile."""
     info = probe_video_info(filepath)
@@ -98,7 +105,7 @@ def profile_conversion_reasons(filepath: str, settings: dict) -> list[str]:
         reasons.append("codec")
     if os.path.splitext(filepath)[1].lower() != f".{normalized_target_container(settings)}":
         reasons.append("container")
-    quality = str(settings.get("download_quality", "1080"))
+    quality = target_resolution(settings)
     if quality.isdigit():
         target = int(quality)
         source = min(info["width"], info["height"])
@@ -107,8 +114,12 @@ def profile_conversion_reasons(filepath: str, settings: dict) -> list[str]:
         elif source < target and settings.get("upscale_to_profile", False):
             reasons.append("upscale")
     fps_limit = str(settings.get("fps_limit", "60"))
-    if fps_limit.isdigit() and info["fps"] > int(fps_limit) + 0.1:
-        reasons.append("fps")
+    if fps_limit.isdigit():
+        target_fps = int(fps_limit)
+        if info["fps"] > target_fps + 0.1:
+            reasons.append("fps")
+        elif settings.get("upscale_to_profile", False) and info["fps"] < target_fps - 0.1:
+            reasons.append("fps_upscale")
     return reasons
 
 
@@ -245,17 +256,25 @@ class ConvertWorker(QThread):
         target_codec = normalized_target_codec(self.settings)
         output_ext = f".{normalized_target_container(self.settings)}"
         filters = []
-        quality = str(self.settings.get("download_quality", "1080"))
+        quality = target_resolution(self.settings)
         if ("resolution" in reasons or "upscale" in reasons) and quality.isdigit():
             limit = int(quality)
-            filters.append(
-                f"scale=-2:{limit}"
+            scale_filter = (
+                f"scale=-2:{limit}:flags=lanczos"
                 if source_info["width"] >= source_info["height"]
-                else f"scale={limit}:-2"
+                else f"scale={limit}:-2:flags=lanczos"
             )
+            if "upscale" in reasons:
+                scale_filter += ",unsharp=5:5:0.8:3:3:0.4"
+            filters.append(scale_filter)
         fps_limit = str(self.settings.get("fps_limit", "60"))
         if "fps" in reasons and fps_limit.isdigit():
             filters.append(f"fps={int(fps_limit)}")
+        elif "fps_upscale" in reasons and fps_limit.isdigit():
+            filters.append(
+                f"minterpolate=fps={int(fps_limit)}:"
+                "mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1"
+            )
 
         source_codec = source_info.get("codec", "unknown")
         codec_already_matches = (

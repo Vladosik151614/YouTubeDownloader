@@ -3,8 +3,10 @@ import os
 import tempfile
 
 from app.error_messages import classify_download_error
+from app.error_reporter import sanitize_text
 from app.downloader import DownloadWorker
 from app.download_utils import media_size_bytes, remove_merged_audio_sidecars
+from app.proxy_config import proxy_url_from_settings
 
 
 class DownloadErrorMessagesTests(unittest.TestCase):
@@ -78,6 +80,51 @@ class DownloadErrorMessagesTests(unittest.TestCase):
             self.assertFalse(os.path.exists(sidecar))
             self.assertTrue(os.path.exists(standalone))
             self.assertIn(standalone, remaining)
+
+    def test_proxy_credentials_are_encoded_and_reports_redact_url_passwords(self):
+        url = proxy_url_from_settings({
+            "proxy_enabled": True,
+            "proxy_type": "http",
+            "proxy_host": "proxy.example",
+            "proxy_port": "8080",
+            "proxy_username": "user@example",
+            "proxy_password": "p@ss:word",
+        })
+        self.assertEqual(
+            url,
+            "http://user%40example:p%40ss%3Aword@proxy.example:8080",
+        )
+        redacted = sanitize_text(
+            "failed via http://user@example:p@ss:word@proxy.example:8080"
+        )
+        self.assertNotIn("p@ss:word", redacted)
+        self.assertIn("http://<redacted>@proxy.example:8080", redacted)
+
+    def test_proxy_settings_reject_unsafe_values(self):
+        base = {
+            "proxy_enabled": True,
+            "proxy_type": "http",
+            "proxy_host": "proxy.example",
+            "proxy_port": "8080",
+        }
+        for overrides in (
+            {"proxy_type": "file"},
+            {"proxy_host": "proxy.example\r\nInjected: yes"},
+            {"proxy_host": "proxy.example/path"},
+            {"proxy_port": "0"},
+            {"proxy_port": "70000"},
+            {"proxy_port": "bad"},
+        ):
+            settings = {**base, **overrides}
+            self.assertEqual(proxy_url_from_settings(settings), "")
+
+        self.assertEqual(
+            proxy_url_from_settings({
+                "proxy_enabled": True,
+                "proxy_url": "file://127.0.0.1:8080",
+            }),
+            "",
+        )
 
 
 if __name__ == "__main__":

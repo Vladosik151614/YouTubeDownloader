@@ -27,7 +27,7 @@ from app.proxy_config import proxy_url_from_settings
 from app.settings_manager import APP_DATA_DIR
 from app.spotify_engine import is_spotify_url, run_spotify_download
 from app.error_messages import classify_download_error
-from app.tiktok_download import download_tiktok_clean_stream_fallback, download_tiktok_ssstik_fallback, emit_tiktok_quality
+from app.tiktok_download import download_tiktok_clean_stream_fallback, download_tiktok_external_quality_fallback, emit_tiktok_quality
 class DownloadWorker(QThread):
     progress = Signal(str, float, str, str); status = Signal(str, str)
     finished = Signal(str, str, bool, str); info_ready = Signal(str, str, bool, int, str)
@@ -116,6 +116,9 @@ class DownloadWorker(QThread):
         quality = str(self.settings.get("download_quality", "1080"))
         fps = str(self.settings.get("fps_limit", "best"))
         download_type = self.settings.get("download_type", "video")
+        if "tiktok.com/" in self.url.lower() and download_type == "video":
+            quality = "1080" if quality == "best" or (quality.isdigit() and int(quality) > 1080) else quality
+            fps = "60" if fps == "best" or (fps.isdigit() and int(fps) > 60) else fps
         os.makedirs(self.output_folder, exist_ok=True)
         if download_type == "audio":
             fmt = "bestaudio/best"
@@ -172,28 +175,25 @@ class DownloadWorker(QThread):
             "ffmpeg_location": os.path.dirname(ffmpeg_bin) if os.path.isfile(ffmpeg_bin) else None,
         }
         if "tiktok.com/" in self.url.lower():
-            try:
-                opts["impersonate"] = ImpersonateTarget.from_str(
-                    str(self.settings.get("tiktok_impersonate") or "chrome-131:android-14")
-                )
-            except Exception as exc:
-                logger.warning(f"[{self.item_id}] TikTok impersonation disabled: {exc}")
+            impersonate = str(self.settings.get("tiktok_impersonate") or "").strip()
+            if impersonate:
+                try:
+                    opts["impersonate"] = ImpersonateTarget.from_str(impersonate)
+                except Exception as exc:
+                    logger.warning(f"[{self.item_id}] TikTok impersonation disabled: {exc}")
         if download_type == "pictures":
             opts.update({"writethumbnail": True, "writeinfojson": False})
         elif download_type == "documents":
             opts.update({"writedescription": True, "writeinfojson": True, "writesubtitles": True})
-
         rate_limit = rate_limit_bytes(self.settings.get("speed_limit", "unlimited"))
         if rate_limit:
             opts["ratelimit"] = rate_limit
         proxy_url = proxy_url_from_settings(self.settings)
         if proxy_url:
             opts["proxy"] = proxy_url
-
         if self.settings.get("skip_duplicates", True):
             os.makedirs(APP_DATA_DIR, exist_ok=True)
             opts["download_archive"] = os.path.join(APP_DATA_DIR, "download_archive.txt")
-
         if self.settings.get("embed_subtitles", False):
             opts.update({
                 "writesubtitles": True,
@@ -201,7 +201,6 @@ class DownloadWorker(QThread):
                 "subtitleslangs": ["all"],
                 "embedsubtitles": True,
             })
-
         if os.path.isfile(deno_bin):
             opts["js_runtimes"] = {"deno": {"path": deno_bin}}
         # Cookies
@@ -214,11 +213,9 @@ class DownloadWorker(QThread):
             cookies_file = self.settings.get("cookies_file", "")
         if cookies_file and os.path.isfile(cookies_file):
             opts["cookiefile"] = cookies_file
-        
         cookies_browser = self.settings.get("cookies_from_browser", "")
         if cookies_browser:
             opts["cookiesfrombrowser"] = (cookies_browser, None, None, None)
-        
         return opts
 
     def _playlist_preflight_info(self, opts: dict) -> tuple[dict, bool]:
@@ -295,7 +292,7 @@ class DownloadWorker(QThread):
         attempts = []
         if profile:
             attempts.append(("profile", lambda: download_tiktok_clean_stream_fallback(self, opts)))
-        attempts.append(("ssstik", lambda: download_tiktok_ssstik_fallback(self, title)))
+        attempts.append(("external_quality", lambda: download_tiktok_external_quality_fallback(self, title)))
         for name, attempt in attempts:
             try:
                 fallback = attempt()

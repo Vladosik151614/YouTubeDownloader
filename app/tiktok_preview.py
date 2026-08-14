@@ -4,6 +4,7 @@ from __future__ import annotations
 import threading
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import urlparse
 
 from curl_cffi import requests
 
@@ -56,6 +57,8 @@ class TikTokPreviewProxy:
                             if value:
                                 self.send_header(name, value)
                         self.send_header("Access-Control-Allow-Origin", "*")
+                        self.send_header("Cache-Control", "no-store")
+                        self.send_header("X-Content-Type-Options", "nosniff")
                         self.end_headers()
                         if head_only:
                             return
@@ -81,10 +84,17 @@ class TikTokPreviewProxy:
         self._thread.start()
 
     def register(self, remote_url: str, headers: dict[str, str]) -> str:
+        parsed = urlparse(str(remote_url or ""))
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError("Preview URL must be http(s)")
         token = uuid.uuid4().hex
+        blocked_headers = {
+            "host", "content-length", "connection", "proxy-authorization",
+            "proxy-authenticate", "transfer-encoding",
+        }
         safe_headers = {
             str(key): str(value) for key, value in headers.items()
-            if value is not None and str(key).lower() not in {"host", "content-length", "connection"}
+            if value is not None and str(key).lower() not in blocked_headers
         }
         with self._lock:
             self._routes = {token: (remote_url, safe_headers)}

@@ -19,11 +19,9 @@ from app.speed_test import SpeedTestWorker
 from app.toggle_switch import ToggleSwitch
 from app.updater import AppUpdateWorker, UpdateWorker
 
-
 THEME_OPTIONS = (("lux_graphite", "Люкс графит"), ("lux_midnight", "Люкс ночная"), ("lux_silver", "Люкс светлая"))
 THEME_INDEX = {key: index for index, (key, _) in enumerate(THEME_OPTIONS)}
 THEME_BY_INDEX = {index: key for index, (key, _) in enumerate(THEME_OPTIONS)}
-
 
 def _combo(values: list[str], width: int = 260) -> QComboBox:
     combo = QComboBox()
@@ -31,7 +29,6 @@ def _combo(values: list[str], width: int = 260) -> QComboBox:
     combo.setMinimumWidth(width)
     combo.setFixedHeight(36)
     return combo
-
 
 def _apply_startup(enabled: bool):
     if os.name != "nt":
@@ -46,7 +43,6 @@ def _apply_startup(enabled: bool):
                 winreg.DeleteValue(key, "YouTubeDownloader")
             except FileNotFoundError:
                 pass
-
 
 class SettingsPage(QWidget):
     settings_changed = Signal(dict)
@@ -223,6 +219,8 @@ class SettingsPage(QWidget):
         self._grid_switch(grid, row, "show_all_codecs_sw", "Показывать AV1 и VP9", 2)
         row += 1
         self._grid_switch(grid, row, "upscale_to_profile_sw", "Улучшать до выбранного разрешения, если исходник ниже")
+        self.upscale_target_combo = _combo(["2K", "4K"])
+        self._grid_row(grid, row, "Цель апскейла:", self.upscale_target_combo, 2)
         _, music_grid = self._grid_group("Музыка Spotify", layout)
         self.spotify_format_combo = _combo(["MP3", "M4A", "Opus", "FLAC", "WAV"])
         self._grid_row(music_grid, 0, "Формат:", self.spotify_format_combo)
@@ -337,6 +335,7 @@ class SettingsPage(QWidget):
         self.download_type_combo.setCurrentIndex({"video": 0, "audio": 1, "pictures": 2, "documents": 3}.get(self.settings.get("download_type", "video"), 0))
         self.quality_combo.setCurrentIndex({"best": 0, "2160": 1, "1440": 2, "1080": 3, "720": 4, "480": 5}.get(str(self.settings.get("download_quality", "1080")), 3))
         self.fps_combo.setCurrentIndex({"best": 0, "60": 1, "30": 2}.get(str(self.settings.get("fps_limit", "best")), 0))
+        self.upscale_target_combo.setCurrentIndex({"1440": 0, "2160": 1}.get(str(self.settings.get("upscale_target", "1440")), 0))
         self.container_combo.setCurrentIndex({"mp4": 0, "mkv": 1, "webm": 2}.get(self.settings.get("container", "mp4"), 0))
         self.encoding_mode_combo.setCurrentIndex({"gpu_auto": 0, "gpu_only": 1, "cpu_only": 2}.get(self.settings.get("encoding_mode", "gpu_auto"), 0))
         self.encoder_combo.setCurrentIndex({"auto": 0, "h264_nvenc": 1, "h264_qsv": 2, "h264_amf": 3, "libx264": 4}.get(self.settings.get("video_encoder", "auto"), 0))
@@ -467,6 +466,7 @@ class SettingsPage(QWidget):
             "download_type": {0: "video", 1: "audio", 2: "pictures", 3: "documents"},
             "quality": {0: "best", 1: "2160", 2: "1440", 3: "1080", 4: "720", 5: "480"},
             "fps": {0: "best", 1: "60", 2: "30"},
+            "upscale_target": {0: "1440", 1: "2160"},
             "container": {0: "mp4", 1: "mkv", 2: "webm"},
             "encoding": {0: "gpu_auto", 1: "gpu_only", 2: "cpu_only"},
             "encoder": {0: "auto", 1: "h264_nvenc", 2: "h264_qsv", 3: "h264_amf", 4: "libx264"},
@@ -485,6 +485,7 @@ class SettingsPage(QWidget):
             "download_type": maps["download_type"].get(self.download_type_combo.currentIndex(), "video"),
             "download_quality": maps["quality"].get(self.quality_combo.currentIndex(), "1080"),
             "fps_limit": maps["fps"].get(self.fps_combo.currentIndex(), "best"),
+            "upscale_target": maps["upscale_target"].get(self.upscale_target_combo.currentIndex(), "1440"),
             "container": maps["container"].get(self.container_combo.currentIndex(), "mp4"),
             "default_codec": maps["codec"].get(self.codec_combo.currentIndex(), "h264"),
             "encoding_mode": maps["encoding"].get(self.encoding_mode_combo.currentIndex(), "gpu_auto"),
@@ -541,9 +542,8 @@ class SettingsPage(QWidget):
             "avoid_duplicate_names_sw": "avoid_duplicate_names",
         }.items():
             self.settings[key] = getattr(self, attr).isChecked()
+        self.settings["auto_convert"] = self.settings["auto_convert"] or self.settings.get("upscale_to_profile", False)
         _apply_startup(self.settings.get("launch_on_startup", False))
         save_settings(self.settings)
         self.settings_changed.emit(self.settings)
-
-
 install_developer_actions(SettingsPage)

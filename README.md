@@ -75,7 +75,7 @@ Most downloader tools are either command-line utilities, ad-heavy websites, or u
 | Service | Support | Notes |
 | --- | --- | --- |
 | YouTube | Video, audio and playlists where supported | Public content should work without sign-in |
-| TikTok | Single video, full profile, selected profile videos and collections | Shared 1080p/60 FPS, 2K or 4K output profile; login/cookies may be required |
+| TikTok | Single video, full profile, selected profile videos and collections | Shared video profile; native quality depends on the streams TikTok provides. Optional upscale can process lower sources to the selected output size |
 | Twitch | Clips and videos where supported | Some content may require access |
 | SoundCloud | Audio where supported | Depends on provider/source |
 | Spotify | Metadata-based music resolving | DRM-protected Spotify audio is not decrypted |

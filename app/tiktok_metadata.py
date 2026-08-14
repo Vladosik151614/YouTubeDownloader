@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import yt_dlp
 from PySide6.QtCore import QThread, Signal
@@ -13,7 +14,7 @@ from app.auth_manager import cookie_file_for_url, ensure_cookie_file_for_url
 from app.download_utils import _best_thumbnail
 from app.error_messages import classify_download_error
 from app.logger import logger
-from app.tiktok_external import ssstik_video_links
+from app.tiktok_external import tikwm_best_quality
 from app.tiktok_quality import best_quality_info, source_quality as measured_source_quality
 
 
@@ -114,10 +115,8 @@ def _codec_label(codec: str) -> str:
 
 def _resolution_label(width: int, height: int) -> str:
     short_side = min(value for value in (width, height) if value > 0)
-    if short_side >= 2160:
-        return "4K"
-    if short_side >= 1440:
-        return "2K"
+    if short_side > 1080:
+        return "1080p+"
     if short_side >= 1080:
         return "1080p"
     if short_side >= 720:
@@ -128,7 +127,10 @@ def _resolution_label(width: int, height: int) -> str:
 
 
 def source_quality(info: dict) -> dict:
-    return measured_source_quality(info)
+    quality = measured_source_quality(info)
+    if quality and not info.get("verified_remote") and not info.get("provider"):
+        quality["confidence"] = "reported"
+    return quality
 
 
 def select_preview_format(formats: list[dict], *, prefer_h264: bool = False) -> dict:
@@ -293,8 +295,55 @@ def _profile_source_data(ydl, sec_uid: str, username: str, ids: set[str]) -> dic
     return result
 
 
+def apply_downloadable_quality(entries: list[dict], probe_limit: int = 5) -> None:
+    """Update visible catalog entries with verified downloadable quality."""
+    for entry in entries[:max(0, int(probe_limit or 0))]:
+        try:
+            verified_quality = tikwm_best_quality(entry["url"])
+        except Exception as exc:
+            logger.warning(
+                f"TikTok downloadable quality probe unavailable: {exc}"
+            )
+            continue
+        if verified_quality:
+            entry["source_quality"] = verified_quality
+
+
+def resolve_downloadable_quality_batch(
+    entries: list[dict], probe_limit: int = 100, max_workers: int = 5,
+):
+    """Yield verified downloadable quality results without blocking the catalog UI."""
+    targets = [
+        entry for entry in entries[:max(0, int(probe_limit or 0))]
+        if entry.get("url")
+    ]
+    if not targets:
+        return
+    workers = max(1, min(8, int(max_workers or 1), len(targets)))
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        future_to_entry = {
+            executor.submit(tikwm_best_quality, entry["url"]): entry
+            for entry in targets
+        }
+        for future in as_completed(future_to_entry):
+            entry = future_to_entry[future]
+            try:
+                quality = future.result()
+            except Exception as exc:
+                logger.warning(
+                    f"TikTok downloadable quality probe unavailable: {exc}"
+                )
+                yield entry["url"], {"probe_failed": True}
+                continue
+            if quality:
+                yield entry["url"], quality
+            else:
+                yield entry["url"], {"probe_failed": True}
+
+
 class TikTokCatalogWorker(QThread):
     loaded = Signal(str, list, list)
+    quality_resolved = Signal(str, dict)
     failed = Signal(str)
 
     def __init__(self, url: str, settings: dict, parent=None):
@@ -337,6 +386,12 @@ class TikTokCatalogWorker(QThread):
                     raise RuntimeError("TIKTOK_EMPTY_COLLECTION")
                 raise RuntimeError("TikTok не вернул доступные видео профиля")
             self.loaded.emit(str(info.get("title") or "TikTok"), entries, playlists)
+            probe_limit = int(self.settings.get("tiktok_quality_probe_limit") or 100)
+            workers = int(self.settings.get("tiktok_quality_probe_workers") or 5)
+            for url, verified_quality in resolve_downloadable_quality_batch(
+                entries, probe_limit, workers,
+            ):
+                self.quality_resolved.emit(url, verified_quality)
         except Exception as exc:
             self.failed.emit(classify_download_error(str(exc)).user_text())
 
@@ -386,24 +441,4 @@ class TikTokPreviewWorker(QThread):
                 f"TikTok preview unavailable: "
                 f"{classify_download_error(str(exc)).category}"
             )
-            try:
-                links = ssstik_video_links(self.video_url)
-                if links:
-                    self.resolved.emit(
-                        self.video_url,
-                        links[0],
-                        {
-                            "User-Agent": (
-                                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                                "Chrome/131.0.0.0 Safari/537.36"
-                            ),
-                            "Referer": "https://ssstik.io/",
-                        },
-                        {},
-                        "",
-                    )
-                    return
-            except Exception as fallback_exc:
-                logger.warning(f"TikTok ssstik preview fallback failed: {fallback_exc}")
             self.resolved.emit(self.video_url, "", {}, {}, reason)
