@@ -17,6 +17,12 @@ def _refresh_settings_page(window):
 
 
 def sync_quick_controls(window):
+    if hasattr(window, "quick_type_combo"):
+        _set_combo(window.quick_type_combo, {"video": 0, "audio": 1, "pictures": 2, "documents": 3}.get(window.settings.get("download_type", "video"), 0))
+        audio = window.settings.get("download_type") == "audio"
+        for name in ("quick_quality_combo", "quick_container_combo", "quick_codec_combo", "quick_encoder_combo", "quick_upscale_switch", "quick_upscale_target_combo", "quick_auto_convert_switch"):
+            if hasattr(window, name):
+                getattr(window, name).setEnabled(not audio)
     maps = {
         "quick_quality_combo": ({"best": 0, "2160": 1, "1440": 2, "1080": 3, "720": 4, "480": 5}, "download_quality", "1080", 3),
         "quick_container_combo": ({"mp4": 0, "mkv": 1, "webm": 2}, "container", "mp4", 0),
@@ -49,6 +55,11 @@ def on_quick_quality_changed(window, index: int):
     save_quick_setting(window, "download_quality", {0: "best", 1: "2160", 2: "1440", 3: "1080", 4: "720", 5: "480"}.get(index, "1080"))
 
 
+def on_quick_type_changed(window, index: int):
+    save_quick_setting(window, "download_type", {0: "video", 1: "audio", 2: "pictures", 3: "documents"}.get(index, "video"))
+    sync_quick_controls(window)
+
+
 def on_quick_container_changed(window, index: int):
     save_quick_setting(window, "container", {0: "mp4", 1: "mkv", 2: "webm"}.get(index, "mp4"))
 
@@ -59,7 +70,17 @@ def on_quick_encoder_changed(window, index: int):
 
 def on_quick_codec_changed(window, index: int):
     window.settings["default_codec"] = {0: "original", 1: "h264", 2: "vp9", 3: "av1"}.get(index, "original")
-    window.settings["auto_convert"] = window.settings["default_codec"] != "original"
+    # Original codec means preserve the codec, not disable independent upscale.
+    window.settings["auto_convert"] = (
+        window.settings["default_codec"] != "original"
+        or bool(window.settings.get("upscale_to_profile", False))
+        or bool(window.settings.get("auto_convert", False))
+    )
+    if hasattr(window, "quick_auto_convert_switch"):
+        switch = window.quick_auto_convert_switch
+        switch.blockSignals(True)
+        switch.setChecked(window.settings["auto_convert"])
+        switch.blockSignals(False)
     save_settings(window.settings)
     _refresh_settings_page(window)
 

@@ -1,4 +1,5 @@
-import os, time, yt_dlp
+import os, time, shutil, tempfile, subprocess, yt_dlp
+from urllib.parse import urlsplit
 from yt_dlp.networking.impersonate import ImpersonateTarget
 from PySide6.QtCore import QThread, Signal
 from app.logger import logger
@@ -6,20 +7,18 @@ from app.binary_manager import get_binary_path
 from app.auth_manager import cookie_file_for_url, ensure_cookie_file_for_url, refresh_cookie_file_for_url
 from app.download_utils import (
     YtDlpLogCollector,
-    exclude_tiktok_watermarked_formats,
     format_bytes,
     is_playlist,
     playlist_entry_rows,
     media_size_bytes,
-    remove_merged_audio_sidecars,
     rate_limit_bytes,
-    set_sleep_prevention,
     thumbnail_url,
 )
 from app.download_artifacts import (
     new_media_files,
     single_output_path,
     snapshot_output_files,
+    validate_video_with_audio,
     write_m3u,
 )
 from app.path_manager import service_output_folder
@@ -27,8 +26,12 @@ from app.proxy_config import proxy_url_from_settings
 from app.settings_manager import APP_DATA_DIR
 from app.spotify_engine import is_spotify_url, run_spotify_download
 from app.error_messages import classify_download_error
-from app.tiktok_download import download_tiktok_clean_stream_fallback, download_tiktok_external_quality_fallback, emit_tiktok_quality
-class DownloadWorker(QThread):
+from app.download_support import DownloadSupportMixin, ValidatedArchiveYoutubeDL, profile_format_selector, validate_video_profile, remux_video_container
+SKIPPED_ALREADY_DOWNLOADED = "SKIPPED_ALREADY_DOWNLOADED"
+from app.tiktok_download import download_tiktok_clean_stream_fallback, download_tiktok_external_quality_fallback
+class ProfileContainerMismatch(RuntimeError):
+    """A fallback produced a file that cannot meet the active container without conversion."""
+class DownloadWorker(DownloadSupportMixin, QThread):
     progress = Signal(str, float, str, str); status = Signal(str, str)
     finished = Signal(str, str, bool, str); info_ready = Signal(str, str, bool, int, str)
     thumbnail_ready = Signal(str, str); playlist_items_ready = Signal(str, list)
@@ -50,68 +53,22 @@ class DownloadWorker(QThread):
         self._cancelled = False
         self._ydl_logger = YtDlpLogCollector(item_id)
         self._auth_retry_used = False
+        self._alternative_retry_used = False
+        # An archive is only a record of a past successful job; it does not
+        # prove that the user still has a usable copy in the selected folder.
+        # A single download that is skipped exclusively by that archive gets
+        # one isolated retry without the archive instead of being presented as
+        # a final "success" or an unrecoverable skip.
+        self._archive_retry_used = False
         self._spotify_process = None
         self._last_progress_time = None
         self._last_downloaded = 0
         self._ema_speed = None
-    def cancel(self):
-        self._cancelled = True
-        if self._spotify_process and self._spotify_process.poll() is None:
-            self._spotify_process.terminate()
-    def run(self):
-        try:
-            if self.settings.get("prevent_sleep", True):
-                set_sleep_prevention(True)
-            self._download()
-        except Exception as e:
-            logger.error(f"[{self.item_id}] Download worker exception: {e}")
-            self.finished.emit(self.item_id, "", False, str(e))
-        finally:
-            if self.settings.get("prevent_sleep", True):
-                set_sleep_prevention(False)
-    def _progress_hook(self, d):
-        if self._cancelled:
-            raise yt_dlp.utils.DownloadCancelled("Отменено пользователем")
-        status = d.get("status", "")
-        info = d.get("info_dict") or {}
-        playlist_index = info.get("playlist_index")
-        if status == "downloading":
-            total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
-            downloaded = d.get("downloaded_bytes", 0)
-            if downloaded < self._last_downloaded:
-                self._last_progress_time = None
-                self._last_downloaded = 0
-                self._ema_speed = None
-            percent = (downloaded / total * 100) if total > 0 else 0
-            numeric_speed = d.get("speed")
-            now = time.monotonic()
-            if not numeric_speed and self._last_progress_time is not None and downloaded >= self._last_downloaded:
-                elapsed = now - self._last_progress_time
-                if elapsed > 0:
-                    numeric_speed = (downloaded - self._last_downloaded) / elapsed
-            if numeric_speed and numeric_speed > 0:
-                alpha = 0.25
-                self._ema_speed = numeric_speed if self._ema_speed is None else alpha * numeric_speed + (1 - alpha) * self._ema_speed
-            self._last_progress_time = now
-            self._last_downloaded = downloaded
-            speed = format_bytes(int(self._ema_speed)) + "/s" if self._ema_speed else d.get("_speed_str", "—")
-            remaining = max(0, total - downloaded)
-            eta_seconds = int(remaining / self._ema_speed) if total and self._ema_speed else d.get("eta")
-            if isinstance(eta_seconds, (int, float)):
-                eta_seconds = int(eta_seconds)
-                eta = f"{eta_seconds // 60:02d}:{eta_seconds % 60:02d}"
-            else:
-                eta = d.get("_eta_str", "—")
-            self.progress.emit(self.item_id, percent, speed, eta)
-            if isinstance(playlist_index, int):
-                self.playlist_item_progress.emit(self.item_id, playlist_index, "Загрузка...", percent)
-        elif status == "finished":
-            self.status.emit(self.item_id, "Обработка файла...")
-            if isinstance(playlist_index, int):
-                self.playlist_item_progress.emit(self.item_id, playlist_index, "Обработка...", 100.0)
+        self._staging_dir = None
     def _build_ydl_opts(self) -> dict:
         ffmpeg_bin = get_binary_path("ffmpeg")
         deno_bin = get_binary_path("deno")
+        node_bin = get_binary_path("node")
         container = self.settings.get("container", "mp4")
         quality = str(self.settings.get("download_quality", "1080"))
         fps = str(self.settings.get("fps_limit", "best"))
@@ -121,36 +78,21 @@ class DownloadWorker(QThread):
             fps = "60" if fps == "best" or (fps.isdigit() and int(fps) > 60) else fps
         os.makedirs(self.output_folder, exist_ok=True)
         if download_type == "audio":
-            fmt = "bestaudio/best"
+            # Never fetch video for the audio-only workflow. Fail clearly if
+            # the service exposes no separate audio track.
+            fmt = "bestaudio[protocol^=http]/bestaudio" if self._alternative_retry_used else "bestaudio"
         elif download_type in {"pictures", "documents"}:
             fmt = "best"
         else:
-            height_filter = "" if quality == "best" else f"[height<={quality}]"
-            fps_filter = "" if fps == "best" else f"[fps<={fps}]"
-            media_filter = f"{height_filter}{fps_filter}"
-            if container == "webm":
-                fmt = (
-                    f"bestvideo[ext=webm]{media_filter}+bestaudio[ext=webm]/"
-                    f"bestvideo{media_filter}+bestaudio/"
-                    "best"
-                )
-            else:
-                fmt = (
-                    f"bestvideo[ext=mp4]{media_filter}+bestaudio[ext=m4a]/"
-                    f"bestvideo[ext=mp4][vcodec^=avc]{media_filter}+bestaudio[ext=m4a]/"
-                    f"bestvideo{media_filter}+bestaudio/"
-                    "best[ext=mp4]/best"
-                )
-        if "tiktok.com/" in self.url.lower() and download_type == "video":
-            fmt = exclude_tiktok_watermarked_formats(fmt)
+            fmt = profile_format_selector(quality, fps, container, 'tiktok.com/' in self.url.lower(), self._ydl_logger, self._alternative_retry_used)
         if is_playlist(self.url):
             filename = "%(playlist_index)03d - %(title)s.%(ext)s" if self.settings.get("playlist_numbering", False) else "%(title)s.%(ext)s"
             if self.settings.get("playlist_subfolders", False) and not self.settings.get("exact_download_folder", True):
-                outtmpl = os.path.join(self.output_folder, "%(playlist_title)s", filename)
+                outtmpl = os.path.join(self._work_dir(), "%(playlist_title)s", filename)
             else:
-                outtmpl = os.path.join(self.output_folder, filename)
+                outtmpl = os.path.join(self._work_dir(), filename)
         else:
-            outtmpl = os.path.join(self.output_folder, "%(title)s.%(ext)s")
+            outtmpl = os.path.join(self._work_dir(), "%(title)s.%(ext)s")
         opts = {
             "format": fmt,
             "outtmpl": outtmpl,
@@ -181,6 +123,8 @@ class DownloadWorker(QThread):
                     opts["impersonate"] = ImpersonateTarget.from_str(impersonate)
                 except Exception as exc:
                     logger.warning(f"[{self.item_id}] TikTok impersonation disabled: {exc}")
+        if download_type == "audio":
+            opts["postprocessors"] = [{"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "0"}]
         if download_type == "pictures":
             opts.update({"writethumbnail": True, "writeinfojson": False})
         elif download_type == "documents":
@@ -191,7 +135,7 @@ class DownloadWorker(QThread):
         proxy_url = proxy_url_from_settings(self.settings)
         if proxy_url:
             opts["proxy"] = proxy_url
-        if self.settings.get("skip_duplicates", True):
+        if self.settings.get("skip_duplicates", True) and not self._archive_retry_used:
             os.makedirs(APP_DATA_DIR, exist_ok=True)
             opts["download_archive"] = os.path.join(APP_DATA_DIR, "download_archive.txt")
         if self.settings.get("embed_subtitles", False):
@@ -203,7 +147,8 @@ class DownloadWorker(QThread):
             })
         if os.path.isfile(deno_bin):
             opts["js_runtimes"] = {"deno": {"path": deno_bin}}
-        # Cookies
+        elif os.path.isfile(node_bin):
+            opts["js_runtimes"] = {"node": {"path": node_bin}}
         cookies_file = cookie_file_for_url(self.url)
         if not cookies_file and self.settings.get("auto_export_cookies", True):
             cookies_file, auth_message = ensure_cookie_file_for_url(self.url)
@@ -216,96 +161,66 @@ class DownloadWorker(QThread):
         cookies_browser = self.settings.get("cookies_from_browser", "")
         if cookies_browser:
             opts["cookiesfrombrowser"] = (cookies_browser, None, None, None)
+        if self._alternative_retry_used:
+            # A single public-YouTube fallback, only after a recoverable failure.
+            # Keep resolution/FPS limits; do not pretend this is a different engine.
+            host = (urlsplit(self.url).hostname or "").lower()
+            if host in {"youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be", "music.youtube.com"}:
+                opts.pop("cookiefile", None)
+                opts.pop("cookiesfrombrowser", None)
         return opts
-
-    def _playlist_preflight_info(self, opts: dict) -> tuple[dict, bool]:
-        if not is_playlist(self.url):
-            return {}, False
-        flat_opts = dict(opts)
-        flat_opts.update({
-            "extract_flat": "in_playlist",
-            "skip_download": True,
-            "playlist_items": None,
-            "progress_hooks": [],
-        })
-        self.status.emit(self.item_id, "Чтение списка плейлиста...")
-        logger.info(f"[{self.item_id}] Fast playlist preflight started")
-        with yt_dlp.YoutubeDL(flat_opts) as ydl:
-            info = ydl.extract_info(self.url, download=False)
-        if not info:
-            return {}, False
-        entries = [entry for entry in (info.get("entries") or []) if entry]
-        logger.info(
-            f"[{self.item_id}] Fast playlist preflight done: "
-            f"title={info.get('title', 'Без названия')}, entries={len(entries)}"
-        )
-        return info, True
-
-    def _friendly_error(self, raw_message: str) -> str:
-        combined = " ".join([str(raw_message)] + self._ydl_logger.messages)
-        return classify_download_error(combined).user_text()
-
-    def _looks_like_auth_error(self, message: str) -> bool:
-        text = " ".join([message] + self._ydl_logger.messages).lower()
-        markers = [
-            "sign in",
-            "login",
-            "not a bot",
-            "confirm your age",
-            "age-restricted",
-            "private video",
-            "members-only",
-            "subscriber",
-            "cookies",
-            "forbidden",
-            "http error 403",
-            "your ip address is blocked",
-        ]
-        return any(marker in text for marker in markers)
-
-    def _refresh_cookies_and_retry(self, message: str) -> bool:
-        if self._auth_retry_used or not self.settings.get("auto_export_cookies", True):
-            return False
-        if not self._looks_like_auth_error(message):
-            return False
-        self._auth_retry_used = True
-        self.status.emit(self.item_id, "Обновление доступа...")
-        cookies_file, auth_message = refresh_cookie_file_for_url(self.url)
-        if auth_message:
-            logger.info(f"[{self.item_id}] Auth refresh: {auth_message}")
-        if not cookies_file:
-            return False
-        self._ydl_logger = YtDlpLogCollector(self.item_id)
-        return True
-
-    def _finish_single_success(self, filepath: str):
-        self._emit_tiktok_quality_if_needed([filepath])
-        self.produced_files.emit(self.item_id, [filepath])
-        self.status.emit(self.item_id, "Завершено")
-        self.finished.emit(self.item_id, filepath, True, "")
-
-    def _emit_tiktok_quality_if_needed(self, filepaths: list[str]):
-        if "tiktok.com/" in self.url.lower():
-            emit_tiktok_quality(self, filepaths)
+    def _finish_single_success(self, filepath):
+        return DownloadSupportMixin._finish_single_success(self, filepath, video_validator=validate_video_with_audio, profile_validator=validate_video_profile)
+    def _prepare_video_container(self, filepath):
+        try:
+            return remux_video_container(filepath, self.settings.get('container', 'mp4'), self.item_id)
+        except (OSError, subprocess.TimeoutExpired, RuntimeError) as exc:
+            if self.settings.get('auto_convert', False) and not self.settings.get('ask_before_codec_convert', True):
+                logger.info('[%s] stage=remux outcome=deferred_to_profile', self.item_id)
+                return filepath
+            raise ProfileContainerMismatch(str(exc)) from exc
 
     def _try_tiktok_fallbacks(self, opts: dict, title: str | None = None, *, profile: bool = True) -> bool:
+        hostname = (urlsplit(self.url).hostname or "").lower()
+        path = urlsplit(self.url).path.lower()
+        is_short_url = hostname in {"vm.tiktok.com", "vt.tiktok.com"}
+        is_single_video = "/video/" in path or is_short_url
+        if (hostname != "tiktok.com" and not hostname.endswith(".tiktok.com")) or not is_single_video:
+            return False
+        if self._cancelled or self.settings.get("download_type", "video") != "video" or is_playlist(self.url):
+            return False
         attempts = []
         if profile:
             attempts.append(("profile", lambda: download_tiktok_clean_stream_fallback(self, opts)))
         attempts.append(("external_quality", lambda: download_tiktok_external_quality_fallback(self, title)))
         for name, attempt in attempts:
+            started = time.monotonic()
             try:
-                fallback = attempt()
+                if self._cancelled:
+                    raise yt_dlp.utils.DownloadCancelled("Отменено пользователем")
+                self.status.emit(self.item_id, "Пробуем другой способ загрузки TikTok...")
+                logger.info(f"[{self.item_id}] TikTok fallback attempt: {name}")
+                destination_folder = self.output_folder
+                self.output_folder = self._work_dir()
+                try:
+                    fallback = attempt()
+                finally:
+                    self.output_folder = destination_folder
                 if fallback:
                     filepath, _title = fallback
                     self._finish_single_success(filepath)
+                    logger.info("[%s] stage=fallback provider=%s outcome=success elapsed=%.2fs", self.item_id, name, time.monotonic() - started)
                     return True
             except yt_dlp.utils.DownloadCancelled:
                 self.status.emit(self.item_id, "Отменено")
                 self.finished.emit(self.item_id, "", False, "Отменено пользователем")
                 return True
+            except ProfileContainerMismatch as mismatch:
+                logger.warning("[%s] stage=fallback category=container_mismatch error=%s", self.item_id, mismatch)
+                self.finished.emit(self.item_id, filepath, False, str(mismatch))
+                return True
             except Exception as fallback_exc:
-                logger.warning(f"[{self.item_id}] TikTok {name} fallback failed: {fallback_exc}")
+                logger.warning("[%s] stage=fallback provider=%s category=%s elapsed=%.2fs error=%s", self.item_id, name, classify_download_error(str(fallback_exc)).category, time.monotonic() - started, fallback_exc)
         return False
 
     def _download(self):
@@ -315,7 +230,7 @@ class DownloadWorker(QThread):
         self.status.emit(self.item_id, "Получение информации...")
         opts = self._build_ydl_opts()
         
-        with yt_dlp.YoutubeDL(opts) as ydl:
+        with ValidatedArchiveYoutubeDL(opts) as ydl:
             logger.info(
                 f"[{self.item_id}] Download options: folder={self.output_folder}, "
                 f"type={self.settings.get('download_type')}, quality={self.settings.get('download_quality')}, "
@@ -330,16 +245,30 @@ class DownloadWorker(QThread):
                     self.status.emit(self.item_id, "Получение информации...")
                     info = ydl.extract_info(self.url, download=False)
                     fast_playlist = False
+            except yt_dlp.utils.DownloadCancelled:
+                self.status.emit(self.item_id, "Отменено")
+                self.finished.emit(self.item_id, "", False, "Отменено пользователем")
+                return
             except Exception as e:
                 if self._try_tiktok_fallbacks(opts):
                     return
                 if self._refresh_cookies_and_retry(str(e)):
+                    self._fresh_retry_stage()
                     self._download()
+                    return
+                if self._retry_youtube_alternative(str(e)):
                     return
                 raise RuntimeError(self._friendly_error(f"Не удалось получить данные ссылки: {e}"))
             
             if info is None:
+                if not is_playlist(self.url) and ydl.skipped_archive_ids and not self._ydl_logger.errors:
+                    if self._retry_after_archive_skip():
+                        return
+                    self.finished.emit(self.item_id, "", False, f"{SKIPPED_ALREADY_DOWNLOADED}:1")
+                    return
                 if self._try_tiktok_fallbacks(opts):
+                    return
+                if self._ydl_logger.errors and self._retry_youtube_alternative(self._ydl_logger.errors[-1]):
                     return
                 raise RuntimeError(self._friendly_error("Ссылка недоступна или заблокирована"))
             
@@ -347,9 +276,12 @@ class DownloadWorker(QThread):
             title = info.get("title", "Без названия")
             
             entries = []
+            unavailable_entries = 0
             if pl and "entries" in info:
                 # Фильтруем None в случае если отдельные видео недоступны в плейлисте
-                entries = [e for e in info["entries"] if e is not None]
+                raw_entries = list(info["entries"] or [])
+                entries = [e for e in raw_entries if e is not None]
+                unavailable_entries = len(raw_entries) - len(entries)
             
             count = len(entries) if pl else 1
             if pl and count == 0:
@@ -362,11 +294,15 @@ class DownloadWorker(QThread):
             self.thumbnail_ready.emit(self.item_id, thumbnail_url(info))
             if pl:
                 self.playlist_items_ready.emit(self.item_id, playlist_entry_rows(entries))
+            tracking = self._setup_playlist_tracking(ydl, entries, unavailable_entries) if pl else None
             
             self.status.emit(self.item_id, "Загрузка...")
             logger.info(f"[{self.item_id}] Downloading {title} (Плейлист: {pl}, видео: {count}, размер: {size_str})")
             
-            files_before = snapshot_output_files(self.output_folder)
+            files_before = snapshot_output_files(self._work_dir())
+            ydl.skipped_archive_ids.clear()
+            if hasattr(ydl, 'skipped_archive_entries'):
+                ydl.skipped_archive_entries.clear()
             download_error = None
             try:
                 result = ydl.download([self.url])
@@ -382,18 +318,47 @@ class DownloadWorker(QThread):
 
             if self._ydl_logger.errors:
                 download_error = self._ydl_logger.errors[-1]
+            if unavailable_entries and not download_error:
+                download_error = f"Недоступных элементов в плейлисте: {unavailable_entries}."
             logger.info(
                 f"[{self.item_id}] yt-dlp finished with warnings={len(self._ydl_logger.messages)} "
                 f"errors={len(self._ydl_logger.errors)} last_error={download_error or 'none'}"
             )
             if "tiktok.com/" in self.url.lower() and download_error and "requested format is not available" in download_error.lower():
                 download_error = f"TIKTOK_NO_CLEAN_FORMAT: {download_error}"
+            skipped_count = len(ydl.skipped_archive_ids)
+            if skipped_count > count:
+                download_error = download_error or "Не удалось подтвердить число пропущенных роликов в архиве."
             
             if pl:
-                new_files = remove_merged_audio_sidecars(new_media_files(self.output_folder, files_before), self.settings.get("download_type", "video"))
+                new_files = new_media_files(self._work_dir(), files_before)
+                if self.settings.get("download_type", "video") == "video":
+                    checked = []
+                    for path in new_files:
+                        if os.path.splitext(path)[1].lower() not in {".mp4", ".mkv", ".webm", ".mov"}:
+                            continue
+                        result = validate_video_with_audio(path)
+                        checked.append((path, validate_video_profile(path, self.settings, self.url, self.item_id) if result[0] else result))
+                    new_files = [path for path, (valid, _) in checked if valid]
+                    invalid = [reason for _, (valid, reason) in checked if not valid]
+                    if invalid:
+                        download_error = download_error or 'invalid video output: ' + invalid[0]
+                elif self.settings.get('download_type') == 'audio':
+                    checked = [path for path in new_files if self._has_complete_retry_output([path])]
+                    if len(checked) != len(new_files):
+                        download_error = download_error or 'invalid audio output: не удалось проверить аудиопоток'
+                    new_files = checked
+                if new_files and len(new_files) + skipped_count < count:
+                    recovered = self._retry_missing_playlist_items(ydl, tracking, new_files, skipped_count, download_error)
+                    if recovered:
+                        new_files.extend(recovered)
+                        download_error = None
                 if download_error and not new_files:
                     if self._refresh_cookies_and_retry(download_error):
+                        self._fresh_retry_stage()
                         self._download()
+                        return
+                    if self._retry_youtube_alternative(download_error):
                         return
                     raise RuntimeError(self._friendly_error(f"Не удалось загрузить плейлист: {download_error}"))
                 if download_error and new_files:
@@ -401,46 +366,84 @@ class DownloadWorker(QThread):
                         f"[{self.item_id}] Playlist completed with skipped/problem items. "
                         f"Saved files: {len(new_files)}. Last issue: {download_error}"
                     )
+                if not new_files:
+                    if not download_error and skipped_count == count:
+                        self.finished.emit(self.item_id, "", False, f"{SKIPPED_ALREADY_DOWNLOADED}:{skipped_count}")
+                        return
+                    raise RuntimeError(self._friendly_error("Не создано ни одного полного файла. Возможно, ролики пропущены как ранее скачанные."))
+                if len(new_files) + skipped_count < count and self.settings.get("download_type", "video") in {"video", "audio"}:
+                    download_error = download_error or f"Получено полных файлов: {len(new_files)} из {count}; некоторые могли быть пропущены."
+                prepared = []
+                for path in new_files:
+                    try:
+                        prepared.append(self._prepare_video_container(path) if self.settings.get('download_type', 'video') == 'video' else path)
+                    except ProfileContainerMismatch as exc:
+                        download_error = download_error or str(exc)
+                new_files = [self._promote_output(path) for path in prepared]
+                if not new_files:
+                    raise RuntimeError(download_error or 'Не удалось сохранить видео в выбранном контейнере')
                 if self.settings.get("create_m3u", False):
                     write_m3u(self.output_folder, new_files, title)
                 self._emit_tiktok_quality_if_needed(new_files)
                 self.produced_files.emit(self.item_id, new_files)
                 filepath = self.output_folder
-            else:
-                generated_files = remove_merged_audio_sidecars(new_media_files(self.output_folder, files_before), self.settings.get("download_type", "video"))
-                filepath = generated_files[0] if self.settings.get("download_type") in {"pictures", "documents"} and generated_files else single_output_path(ydl, info)
                 if download_error:
-                    if self._try_tiktok_fallbacks(opts, title, profile=False):
-                        return
-                    if self._refresh_cookies_and_retry(download_error):
-                        self._download()
-                        return
+                    self.finished.emit(self.item_id, filepath, False, "Плейлист загружен не полностью: " + self._friendly_error(download_error))
+                    return
+            else:
+                generated_files = new_media_files(self._work_dir(), files_before)
+                expected_path = single_output_path(ydl, info)
+                if self.settings.get("download_type", "video") == "video":
+                    candidates = [path for path in generated_files if os.path.splitext(path)[1].lower() in {".mp4", ".mkv", ".webm", ".mov"}]
+                    filepath = expected_path if expected_path in candidates else (candidates[0] if candidates else "")
+                else:
+                    filepath = expected_path if expected_path in generated_files else (generated_files[0] if generated_files else "")
+                if download_error:
+                    # Never retry over an already complete output.  If only
+                    # partial/broken files exist, a new isolated attempt is
+                    # safe and the previous data is retained for recovery.
+                    complete = self._has_complete_retry_output(generated_files)
+                    if not complete:
+                        self._fresh_retry_stage()
+                        if self._try_tiktok_fallbacks(opts, title, profile=False):
+                            return
+                        if self._refresh_cookies_and_retry(download_error):
+                            self._fresh_retry_stage()
+                            self._download()
+                            return
+                        if self._retry_youtube_alternative(download_error):
+                            return
                     raise RuntimeError(self._friendly_error(f"Не удалось загрузить видео: {download_error}"))
                 if not os.path.isfile(filepath):
-                    raise RuntimeError(self._friendly_error("Загрузка закончилась без готового файла"))
+                    if not download_error and skipped_count == 1 and not generated_files:
+                        if self._retry_after_archive_skip():
+                            return
+                        self.finished.emit(self.item_id, "", False, f"{SKIPPED_ALREADY_DOWNLOADED}:1")
+                        return
+                    raise RuntimeError(self._friendly_error("Загрузка не создала новый файл. Возможно, видео пропущено как ранее скачанное."))
+                if self.settings.get("download_type", "video") == "video":
+                    valid, error = validate_video_with_audio(filepath)
+                    if valid:
+                        valid, error = validate_video_profile(filepath, self.settings, self.url, self.item_id)
+                    if not valid:
+                        if self._try_tiktok_fallbacks(opts, title):
+                            return
+                        if self._retry_youtube_alternative('invalid video output'):
+                            return
+                        raise RuntimeError(error + ". Файл сохранён для диагностики; повторите загрузку.")
+                    filepath = self._prepare_video_container(filepath)
+                elif self.settings.get('download_type') == 'audio' and not self._has_complete_retry_output([filepath]):
+                    if self._retry_youtube_alternative('invalid audio output'):
+                        return
+                    raise RuntimeError('Не удалось проверить аудиопоток. Файл сохранён для диагностики.')
+                filepath = self._promote_output(filepath)
                 self._emit_tiktok_quality_if_needed([filepath])
                 self.produced_files.emit(self.item_id, [filepath])
-            
             logger.info(f"[{self.item_id}] Download process finished: {filepath}")
+            # A partially successful playlist must not mark failed items as
+            # downloaded. Retry remains possible for every unverified item.
+            if not pl or len(new_files) + skipped_count >= count:
+                ydl.commit_validated_archive()
             self.status.emit(self.item_id, "Завершено")
-            self.finished.emit(self.item_id, filepath, True, "")
-
-    def _download_spotify(self):
-        download_type = "audio"
-        os.makedirs(self.output_folder, exist_ok=True)
-        logger.info(f"[{self.item_id}] Spotify download started: folder={self.output_folder}")
-        self.info_ready.emit(self.item_id, "Spotify music", True, 0, "—")
-        files, error = run_spotify_download(self, self.url, self.output_folder, self.settings)
-        if error:
-            cancelled = "Отменено" in error
-            self.status.emit(self.item_id, "Отменено" if cancelled else "Ошибка")
-            self.finished.emit(self.item_id, "", False, "Отменено пользователем" if cancelled else self._friendly_error(error))
-            return
-        if not files:
-            self.finished.emit(self.item_id, "", False, "Spotify загрузка закончилась без готовых аудиофайлов.")
-            return
-        logger.info(f"[{self.item_id}] Spotify download finished: files={len(files)}")
-        self.produced_files.emit(self.item_id, list(files))
-        self.progress.emit(self.item_id, 100.0, "—", "—")
-        self.status.emit(self.item_id, "Завершено")
-        self.finished.emit(self.item_id, files[0] if len(files) == 1 else self.output_folder, True, "")
+            note = f"{SKIPPED_ALREADY_DOWNLOADED}:{skipped_count}" if skipped_count else ""
+            self.finished.emit(self.item_id, filepath, True, note)

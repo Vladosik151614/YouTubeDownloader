@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import QSize, Qt, Signal, QUrl
 from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap
-from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest
+from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 from app.icon_button import ActionIconButton
 from app.download_utils import format_bytes
 from app.logger import logger
@@ -152,6 +152,8 @@ class QueueWidget(QWidget):
                 mark = QLabel("✓")
                 mark.setStyleSheet("color: #4caf50; font-weight: bold;")
                 btn_layout.addWidget(mark)
+            elif self._finished[item_id] is None:
+                btn_layout.addWidget(QLabel("—"))
             else:
                 retry_btn = ActionIconButton("retry", "Повторить")
                 retry_btn.clicked.connect(lambda _, iid=item_id: self.retry_requested.emit(iid))
@@ -263,7 +265,7 @@ class QueueWidget(QWidget):
         if not target:
             reply.deleteLater()
             return
-        if reply.error():
+        if reply.error() != QNetworkReply.NetworkError.NoError:
             logger.warning(f"Thumbnail load failed: {reply.errorString()}")
             item_id, playlist_index, _ = target
             self._apply_thumbnail(item_id, playlist_index, self._placeholder_thumbnail())
@@ -466,7 +468,6 @@ class QueueWidget(QWidget):
             self.table.item(row, 6).setText(label)
 
     def set_item_codec(self, item_id: str, codec: str, playlist_index: int | None = None, final: bool = False):
-        """Compatibility API for callers that set a queue item's codec directly."""
         if final:
             self.set_final_codec(item_id, codec, playlist_index)
         else:
@@ -477,7 +478,7 @@ class QueueWidget(QWidget):
         value = str(codec or "original").strip().lower()
         return {"original": "Оригинал", "h264": "H.264", "avc1": "H.264", "hevc": "H.265", "h265": "H.265", "vp9": "VP9", "av1": "AV1"}.get(value, value.upper() or "—")
 
-    def set_finished(self, item_id: str, success: bool):
+    def set_finished(self, item_id: str, success: bool | None):
         row = self._items.get(item_id)
         if row is None:
             return

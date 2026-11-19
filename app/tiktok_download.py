@@ -143,6 +143,21 @@ def _quality_display(quality: dict) -> str:
     return label
 
 
+def _matches_download_profile(quality: dict, settings: dict) -> bool:
+    """Reject an external source above a requested TikTok download limit."""
+    requested = str(settings.get('download_quality', '1080'))
+    limit = min(int(requested), 1080) if requested.isdigit() else 1080
+    requested_fps = str(settings.get('fps_limit', 'best'))
+    fps_limit = min(int(requested_fps), 60) if requested_fps.isdigit() else 60
+    try:
+        width = int(quality.get('width') or 0)
+        height = int(quality.get('height') or 0)
+        fps = float(quality.get('fps') or 0)
+    except (TypeError, ValueError):
+        return False
+    return bool(width and height) and min(width, height) <= limit and (not fps or fps <= fps_limit + 0.1)
+
+
 def _download_best_candidate(worker, candidates: list[dict], final_title: str) -> tuple[str, str]:
     if not candidates:
         raise RuntimeError("TikTok не отдал MP4-кандидаты без водяного знака")
@@ -177,6 +192,10 @@ def _download_best_candidate(worker, candidates: list[dict], final_title: str) -
                 quality = probe_file_quality(temp_path)
                 if not quality.get("width") or not quality.get("height"):
                     raise RuntimeError("ffprobe не подтвердил видеопоток")
+                if quality.get("has_audio") is False:
+                    raise RuntimeError("ffprobe не подтвердил звук")
+                if not _matches_download_profile(quality, worker.settings):
+                    raise RuntimeError("Источник TikTok превышает выбранное качество или FPS")
                 quality["candidate"] = candidate
                 downloaded.append((temp_path, quality))
                 logger.info(
@@ -299,6 +318,8 @@ def download_tiktok_clean_stream_fallback(worker, opts: dict) -> tuple[str, str]
         worker, stream_url, headers, filepath, impersonate="chrome131_android"
     )
     quality = probe_file_quality(filepath)
+    if not _matches_download_profile(quality, worker.settings):
+        raise RuntimeError("Источник TikTok превышает выбранное качество или FPS; файл сохранён для диагностики")
     if quality.get("label"):
         _emit_signal(worker, "status", worker.item_id, f"TikTok скачан: {_quality_display(quality)}")
         quality["filepath"] = filepath

@@ -2,6 +2,24 @@
 
 All notable public release changes should be documented here.
 
+## 0.1.6 - 2026-11-19
+
+- Added explicit audio-only MP3 download on the main screen, without fetching a video stream.
+- Added persistent TikTok preview sound toggle and full-preview looping.
+- Corrected format ranking for missing FPS and bitrate ties; preserved measured card quality during preview.
+- Improved validated output handling, archive recovery, partial-playlist retries and bounded shutdown.
+- Restricted release inputs to allowlisted source files; excluded local diagnostics, media, runtimes and owner components from public export.
+
+- Added a standalone left-side `Upscale` tab for local video files, independent from YouTube/TikTok downloads.
+- Added local-file profile controls for target size, FPS, container, codec and encoder.
+- Added a selectable output folder for standalone Upscale results.
+- Reused the verified ffmpeg/ffprobe conversion pipeline for standalone upscale so output is finalized only after validation.
+- Preserved source videos by default in the standalone Upscale workflow.
+- Added before/after embedded preview panels and open-folder actions for comparing the original and processed result.
+- Added muted autoplay in the Before/After preview cards.
+- Updated application, installer, support report, updater and owner/public release workflow metadata to `0.1.6`.
+- Publication time: see the GitHub Release timestamp (Europe/Berlin).
+
 ## 0.1.5 - 2026-08-14
 
 - Embedded TikTok browsing into the first download screen without a separate page or permanent right preview panel.

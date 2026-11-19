@@ -4,6 +4,7 @@ from __future__ import annotations
 from PySide6.QtCore import QTimer
 
 from app.tiktok_catalog import TikTokCatalogWidget
+from app.settings_manager import save_settings
 
 
 TIKTOK_WINDOW_WIDTH = 1292
@@ -23,6 +24,10 @@ def open_tiktok_catalog(self, url: str) -> bool:
         self.tiktok_catalog_layout.removeWidget(old)
         old.dispose()
     panel = TikTokCatalogWidget(url, self.settings, self.tiktok_catalog_host)
+    def save_preview_sound(enabled):
+        self.settings["tiktok_preview_sound"] = bool(enabled)
+        save_settings(self.settings)
+    panel.preview_sound_changed.connect(save_preview_sound)
     panel.closed.connect(lambda: self._close_tiktok_catalog(panel))
     panel.download_requested.connect(self._queue_tiktok_download)
     self._tiktok_catalog = panel

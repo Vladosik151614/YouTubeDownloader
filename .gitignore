@@ -4,6 +4,12 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.local-ui-test/
+.local-ui-*/
+docs/tiktok_hd_sound_2026-11-17.md
+local-ui-test/
+spotify-verifier-output/
+.spotify-verify-*/
 
 .venv/
 venv/
@@ -23,7 +29,9 @@ bin/*.zip
 
 settings.json
 *.log
+*.log.*
 logs/
+owner_diagnostics/
 *.bak
 *.tmp
 

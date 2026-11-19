@@ -10,6 +10,22 @@ from app.proxy_config import proxy_url_from_settings
 
 
 class DownloadErrorMessagesTests(unittest.TestCase):
+    def test_unavailable_video_remains_specific_after_second_classification(self):
+        first = classify_download_error('ERROR: Video unavailable')
+        second = classify_download_error(first.user_text())
+        self.assertEqual(second.category, 'unavailable')
+        self.assertEqual(second.title, 'Видео недоступно')
+
+    def test_incomplete_video_error_is_not_generic(self):
+        info = classify_download_error("В файле отсутствует звук")
+        self.assertEqual(info.category, "incomplete_media")
+        self.assertIn("звук", info.user_text())
+
+    def test_partial_playlist_reports_saved_files(self):
+        info = classify_download_error("Недоступных элементов в плейлисте: 2")
+        self.assertEqual(info.category, "partial_playlist")
+        self.assertIn("сохранены", info.user_text())
+
     def test_http_403_is_explained_without_losing_detail(self):
         raw = "ERROR: unable to download video data: HTTP Error 403: Forbidden"
         info = classify_download_error(raw)

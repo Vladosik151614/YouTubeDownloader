@@ -33,6 +33,43 @@ def tiktok_url(path: str) -> str:
 
 
 class TikTokCatalogLogicTests(unittest.TestCase):
+    def test_preview_metadata_does_not_replace_measured_download_quality(self):
+        from app.tiktok_card import TikTokVideoCard
+        panel = TikTokCatalogWidget(tiktok_url('/@creator'), {}, auto_load=False)
+        try:
+            url = tiktok_url('/@creator/video/1')
+            quality = {'label': '1080p · 60 FPS', 'verified_remote': True}
+            card = TikTokVideoCard({'url': url, 'source_quality': quality})
+            panel.cards_by_url[url] = card
+            panel._on_preview_resolved(url, '', {}, {'label':'720p','confidence':'reported'}, '')
+            self.assertEqual(card.entry['source_quality'], quality)
+            self.assertFalse(card._quality_loading_timer.isActive())
+        finally:
+            panel.dispose()
+
+    def test_sound_toggle_controls_audio_and_preserves_animated_fallback_hint(self):
+        from app.tiktok_card import TikTokVideoCard
+        panel = TikTokCatalogWidget(tiktok_url('/@creator'), {}, auto_load=False)
+        try:
+            card = TikTokVideoCard({'url': tiktok_url('/@creator/video/1')})
+            panel._active_card = card
+            card.cover_stack.setCurrentWidget(card.animation_label)
+            card.preview_hint.setText('Короткая обложка без звука')
+            self.assertFalse(panel.audio_output.isMuted())
+            self.assertEqual(panel.player.loops(), -1)
+            panel.sound_btn.click()
+            self.assertTrue(panel.audio_output.isMuted())
+            panel.sound_btn.click()
+            self.assertFalse(panel.audio_output.isMuted())
+            self.assertEqual(card.preview_hint.text(), 'Короткая обложка без звука')
+            card.show_preview()
+            panel.sound_btn.click()
+            self.assertEqual(card.preview_hint.text(), 'Предпросмотр без звука')
+            panel.sound_btn.click()
+            self.assertEqual(card.preview_hint.text(), 'Предпросмотр со звуком')
+        finally:
+            panel.dispose()
+
     @classmethod
     def setUpClass(cls):
         os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -74,8 +111,9 @@ class TikTokCatalogLogicTests(unittest.TestCase):
                 "container": "mp4", "tiktok_max_quality": True, "exact_download_folder": True,
             })
             options = worker._build_ydl_opts()
-            self.assertIn("[height<=1080][fps<=30]", options["format"])
-            self.assertNotIn("format_sort", options)
+            candidate = lambda name, width, height, fps: {'format_id':name, 'width':width, 'height':height, 'fps':fps, 'ext':'mp4', 'vcodec':'h264', 'acodec':'aac', 'protocol':'https'}
+            selected = list(options['format']({'formats':[candidate('low', 720, 1280, 30), candidate('too-fast',1080,1920,60)], 'incomplete_formats':False}))
+            self.assertEqual(selected[0]['format_id'], 'low')
 
     def test_tiktok_download_is_capped_at_full_hd_even_with_upscale_profile(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -85,8 +123,9 @@ class TikTokCatalogLogicTests(unittest.TestCase):
                 "container": "mp4", "exact_download_folder": True,
             })
             options = worker._build_ydl_opts()
-            self.assertIn("[height<=1080][fps<=60]", options["format"])
-            self.assertNotIn("[height<=2160]", options["format"])
+            candidate = lambda name, width, height: {'format_id':name, 'width':width, 'height':height, 'fps':60, 'ext':'mp4', 'vcodec':'h264', 'acodec':'aac', 'protocol':'https'}
+            selected = list(options['format']({'formats':[candidate('fullhd',1080,1920),candidate('too-large',2160,3840)],'incomplete_formats':False}))
+            self.assertEqual(selected[0]['format_id'], 'fullhd')
 
     def test_tiktok_watermark_filter_stays_enabled_without_maximum_quality(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -95,9 +134,10 @@ class TikTokCatalogLogicTests(unittest.TestCase):
                 "container": "mp4", "tiktok_max_quality": False, "exact_download_folder": True,
             })
             selector = worker._build_ydl_opts()["format"]
-            video_terms = [term for alternative in selector.split("/") for term in alternative.split("+") if term.startswith("bestvideo") or term.startswith("best[") or term == "best"]
-            self.assertTrue(video_terms)
-            self.assertTrue(all("format_note!*=?watermarked" in term for term in video_terms))
+            base = {'width':720,'height':1280,'fps':30,'ext':'mp4','vcodec':'h264','acodec':'aac','protocol':'https'}
+            formats = [dict(base, format_id='clean'), dict(base, format_id='marked', format_note='watermarked')]
+            selected = list(selector({'formats':formats,'incomplete_formats':False}))
+            self.assertEqual(selected[0]['format_id'], 'clean')
 
     def test_tiktok_does_not_enable_unavailable_impersonation_by_default(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -253,7 +293,7 @@ class TikTokCatalogLogicTests(unittest.TestCase):
             "label": "1080p (1080×1920) · 60 FPS · H.265",
             "confidence": "available",
         })
-        self.assertIn("Макс. доступно", card.quality_label.text())
+        self.assertIn("Проверенный вариант", card.quality_label.text())
         self.assertIn("1080p", card.quality_label.text())
         self.assertFalse(card._quality_loading_timer.isActive())
         dialog.close()

@@ -44,7 +44,7 @@ class TrayController:
 
     def quit(self):
         self.allow_close = True
-        QApplication.quit()
+        self.window.close()
 
     def notify(self, title: str, message: str):
         if not self.window.settings.get("show_in_notification_center", True):

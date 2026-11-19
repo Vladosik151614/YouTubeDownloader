@@ -102,11 +102,17 @@ class TikTokVideoCard(QFrame):
             target.setMouseTracking(True)
             target.installEventFilter(self)
 
-        self.preview_hint = QLabel("Наведите для предпросмотра без звука")
+        self.preview_hint = QLabel("Наведите для предпросмотра · звук — кнопка сверху")
         self.preview_hint.setObjectName("subtle")
         self.preview_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.preview_hint.setWordWrap(True)
         self.preview_hint.setStyleSheet("font-size: 10px;")
+        # Reserve room for wrapped text: otherwise a cramped grid row may
+        # compress the label into the bottom edge of the fixed-size cover.
+        self.preview_hint.setMinimumHeight(32)
+        self.preview_hint.setSizePolicy(
+            QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum
+        )
         root.addWidget(self.preview_hint)
 
         self.quality_label = QLabel()
@@ -197,13 +203,18 @@ class TikTokVideoCard(QFrame):
     def _render_cover(self):
         if self._cover_pixmap.isNull():
             return
-        self.cover_label.setPixmap(
-            self._cover_pixmap.scaled(
-                self.cover_label.size(),
-                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                Qt.TransformationMode.SmoothTransformation,
-            )
+        target_size = self.cover_host.size()
+        scaled = self._cover_pixmap.scaled(
+            target_size,
+            Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+            Qt.TransformationMode.SmoothTransformation,
         )
+        # QLabel uses the pixmap as a size hint. Keeping the larger dimension
+        # produced by KeepAspectRatioByExpanding can enlarge the label beyond
+        # the fixed host and paint over the hint below it. Centre-crop first.
+        x = max(0, (scaled.width() - target_size.width()) // 2)
+        y = max(0, (scaled.height() - target_size.height()) // 2)
+        self.cover_label.setPixmap(scaled.copy(x, y, target_size.width(), target_size.height()))
         if self.has_animated_preview:
             self._preview_movie.setScaledSize(self.animation_label.size())
 
@@ -218,6 +229,9 @@ class TikTokVideoCard(QFrame):
         cover_height = 283 if large else 240
         self.setFixedWidth(card_width)
         self.cover_host.setFixedSize(cover_width, cover_height)
+        # A wrapped hint can grow after preview errors; give the parent layout
+        # enough vertical room so it cannot overlap the fixed-height cover.
+        self.setMinimumHeight(cover_height + 190)
 
     def set_source_quality(self, quality: dict):
         self.entry["source_quality"] = dict(quality or {})
@@ -235,7 +249,9 @@ class TikTokVideoCard(QFrame):
             self._start_quality_loading(label)
             return
         if label:
-            prefix = "Доступно" if confidence == "limited" else "Макс. доступно"
+            # The probe establishes properties of a retrieved candidate, not
+            # the absolute maximum offered by TikTok or all providers.
+            prefix = "Проверенный вариант"
             suffix = " · HD не подтверждён" if confidence == "limited" else ""
             self.quality_label.setText(f"{prefix}: {label}{suffix}")
         else:
@@ -281,7 +297,7 @@ class TikTokVideoCard(QFrame):
         self.cover_stack.setCurrentWidget(self.video_widget)
         self.preview_hint.setText(message)
 
-    def show_cover(self, message: str = "Наведите для предпросмотра без звука"):
+    def show_cover(self, message: str = "Наведите для предпросмотра · звук — кнопка сверху"):
         self.stop_animated_preview()
         self.cover_stack.setCurrentWidget(self.cover_label)
         self.preview_hint.setText(message)
@@ -304,7 +320,9 @@ class TikTokCardGrid(QWidget):
 
     def add_card(self, card: TikTokVideoCard):
         self.cards.append(card)
-        self.reflow()
+        # Coalesce additions in the current event-loop turn instead of
+        # rebuilding the complete grid once per video.
+        self._reflow_timer.start(0)
 
     def set_size_mode(self, mode: str):
         self.size_mode = mode

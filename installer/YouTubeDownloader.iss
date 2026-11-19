@@ -1,8 +1,8 @@
-; Inno Setup script for YouTube Downloader 0.1.5
+; Inno Setup script for YouTube Downloader 0.1.6
 ; Build dist\YouTubeDownloader.exe first, then compile this script with Inno Setup.
 
 #define MyAppName "YouTube Downloader"
-#define MyAppVersion "0.1.5"
+#define MyAppVersion "0.1.6"
 #define MyAppPublisher "YouTube Downloader"
 #define MyAppExeName "YouTubeDownloader.exe"
 
@@ -17,7 +17,7 @@ AllowNoIcons=yes
 LicenseFile=..\USER_AGREEMENT.md
 InfoBeforeFile=..\PRIVACY.md
 OutputDir=..\release
-OutputBaseFilename=YouTubeDownloaderSetup-0.1.5
+OutputBaseFilename=YouTubeDownloaderSetup-0.1.6
 SetupIconFile=..\youtube.ico
 Compression=lzma
 SolidCompression=yes

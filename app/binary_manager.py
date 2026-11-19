@@ -13,6 +13,49 @@ STACHER_DIR = os.path.join(os.path.expanduser("~"), ".stacher")
 
 os.makedirs(LOCAL_APP_DATA_BIN, exist_ok=True)
 
+
+def sanitize_inherited_dll_path() -> None:
+    """Remove foreign OpenSSL directories inherited from a parent process.
+
+    The application uses Python extensions which load their own compatible
+    OpenSSL runtime.  Developer tools sometimes prepend another product's
+    Poppler/OpenSSL folder to ``PATH``.  On Windows the loader can then bind a
+    mismatched ``libssl`` first and display a native "entry point not found"
+    dialog.  Keep Python's own directory and remove only *foreign* path
+    entries that visibly contain OpenSSL DLLs.
+    """
+    if os.name != "nt":
+        return
+    protected = {
+        os.path.normcase(os.path.abspath(path))
+        for path in {
+            os.path.dirname(sys.executable),
+            sys.prefix,
+            getattr(sys, "base_prefix", ""),
+        }
+        if path
+    }
+    cleaned = []
+    changed = False
+    for entry in os.environ.get("PATH", "").split(os.pathsep):
+        if not entry:
+            continue
+        normalized = os.path.normcase(os.path.abspath(entry))
+        has_foreign_crypto = (
+            normalized not in protected
+            and os.path.isdir(entry)
+            and any(
+                os.path.isfile(os.path.join(entry, dll_name))
+                for dll_name in ("libssl-3-x64.dll", "libcrypto-3-x64.dll")
+            )
+        )
+        if has_foreign_crypto:
+            changed = True
+            continue
+        cleaned.append(entry)
+    if changed:
+        os.environ["PATH"] = os.pathsep.join(cleaned)
+
 def get_base_dir() -> str:
     if getattr(sys, 'frozen', False):
         return os.path.dirname(sys.executable)

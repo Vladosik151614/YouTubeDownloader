@@ -31,14 +31,16 @@ def load_history(limit: int = 200) -> list[dict]:
 def add_history_entry(url: str, title: str, path: str, success: bool, error: str = "") -> None:
     os.makedirs(APP_DATA_DIR, exist_ok=True)
     source = urlparse(url).netloc.lower().replace("www.", "") if url else ""
+    archive_notice = str(error or "").startswith("SKIPPED_ALREADY_DOWNLOADED:")
+    status = ("success_with_skips" if success else "skipped") if archive_notice else ("success" if success else "error")
     entry = {
         "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "source": source or "unknown",
         "title": title or url or "Без названия",
         "url": url or "",
         "path": path or "",
-        "status": "success" if success else "error",
-        "error": error or "",
+        "status": status,
+        "error": "Пропущено: запись есть в архиве загрузок; наличие файла не проверялось." if archive_notice else error or "",
     }
     history = [entry] + _read_history()
     with open(HISTORY_FILE, "w", encoding="utf-8") as f:

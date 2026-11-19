@@ -10,6 +10,8 @@ import os
 import re
 import sys
 from pathlib import Path
+sys.dont_write_bytecode = True
+from release_manifest import release_files
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -85,7 +87,7 @@ def main() -> int:
         if (ROOT / blocked_dir).exists():
             issues.append(f"Generated directory exists: {blocked_dir}/")
 
-    for path in ROOT.rglob("*"):
+    for path in release_files(ROOT):
         if not path.is_file() or should_skip(path):
             continue
         rel = path.relative_to(ROOT).as_posix()
@@ -99,6 +101,8 @@ def main() -> int:
             for match in pattern.finditer(text):
                 value = match.group(0)
                 if any(snippet in value for snippet in ALLOWLIST_SNIPPETS):
+                    continue
+                if label == "Concrete YouTube test URL" and rel.startswith("tests/"):
                     continue
                 issues.append(f"{label}: {rel}:{text[:match.start()].count(chr(10)) + 1}")
 

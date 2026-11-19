@@ -1,5 +1,37 @@
 # Release Notes
 
+## 0.1.6
+
+Дата версии: 19 ноября 2026 года. Фактическое время публикации указано в GitHub Release.
+
+### Загрузка и исправления
+
+- На главном экране появился режим «Только звук — MP3». Загружается отдельная аудиодорожка без видеопотока; ffmpeg преобразует её в MP3, временный исходник удаляется после успеха.
+- Видео со звуком остаётся отдельным режимом. Профиль видео не изменяется при выборе MP3.
+- Предпросмотр TikTok получил переключатель звука с сохранением настройки и повторение полного ролика при наведении.
+- Исправлены выбор качества при неизвестном FPS, сортировка равных форматов по битрейту и перезапись измеренного качества данными предпросмотра.
+- Добавлены проверки полноценных видео/аудиофайлов, восстановление одиночной загрузки после пропуска архивом и восстановление частичных плейлистов.
+- Доработаны ограниченное ожидание потоков при закрытии, фоновая загрузка каталога и owner-диагностика со старыми локальными журналами.
+- Публичная сборка исключает owner-панель и её исходники. В обе публикации не включаются cookies, логи, история, локальные тестовые результаты и окружение разработчика.
+
+Ограничения: TikTok зависит от доступных сервису потоков. Получение более высокобитрейтного HD-варианта, равного некоторым сайтам, не подтверждено; разрешение 1080p само по себе не доказывает максимальное качество. Upscale — отдельная обработка, не исходное качество.
+
+Standalone local-video Upscale:
+
+- Added a dedicated `Upscale` tab in the left navigation.
+- The new workflow accepts normal local video files from disk, not only files downloaded through the app.
+- Added processing controls for target size, FPS, container, codec and encoder.
+- Added an explicit result folder selector for standalone Upscale output.
+- Source files are preserved by default in standalone Upscale; deletion is still controlled by the conversion profile when explicitly disabled.
+- Added side-by-side `До` / `После` preview panels so the user can compare the source and processed result.
+- Added muted autoplay for the `До` / `После` preview cards.
+- Reused the existing safe conversion pipeline: temporary output, ffprobe validation, final replace, and cleanup on error.
+- Updated application, support-report, updater, installer and owner workflow version metadata to `0.1.6`.
+
+Publication timestamp: see GitHub Release (Europe/Berlin).
+
+Для MP3 требуется FFmpeg и ffprobe в системном PATH или в папке бинарников приложения. Проверка установщиков выполнена на Windows с установленными FFmpeg/ffprobe; чистая Windows без этих зависимостей не проверена.
+
 ## 0.1.5
 
 Release date: August 14, 2026. Release time: `2026-08-14 05:45:07 +02:00`.

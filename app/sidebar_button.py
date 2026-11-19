@@ -35,6 +35,15 @@ class SidebarNavButton(QPushButton):
             path.lineTo(cx + 4, cy + 2)
             painter.drawPath(path)
             painter.drawLine(QPointF(cx - 6, box.bottom() - 2), QPointF(cx + 6, box.bottom() - 2))
+        elif self.icon_name == "upscale":
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRect(box.adjusted(2, 5, -2, -2))
+            path = QPainterPath()
+            path.moveTo(box.left() + 3, cy + 1)
+            path.lineTo(cx, box.top() + 2)
+            path.lineTo(box.right() - 3, cy + 1)
+            painter.drawPath(path)
+            painter.drawLine(QPointF(cx, box.top() + 2), QPointF(cx, box.bottom() - 3))
         elif self.icon_name == "settings":
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawEllipse(QRectF(cx - 5, cy - 5, 10, 10))

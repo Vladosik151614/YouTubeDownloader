@@ -4,18 +4,19 @@ from __future__ import annotations
 import os
 import re
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, FIRST_COMPLETED, wait
 
 import yt_dlp
 from PySide6.QtCore import QThread, Signal
 from yt_dlp.extractor.tiktok import TikTokUserIE
 
 from app.auth_manager import cookie_file_for_url, ensure_cookie_file_for_url
-from app.download_utils import _best_thumbnail
+from app.download_utils import YtDlpLogCollector, _best_thumbnail
 from app.error_messages import classify_download_error
 from app.logger import logger
 from app.tiktok_external import tikwm_best_quality
 from app.tiktok_quality import best_quality_info, source_quality as measured_source_quality
+from app.tiktok_playlist_metadata import extract_catalog_playlists
 
 
 def is_tiktok_collection_url(url: str) -> bool:
@@ -69,34 +70,6 @@ def normalize_catalog_entries(entries, source_url: str) -> list[dict]:
             "duration": int(entry.get("duration") or 0),
             "source_quality": source_quality(entry),
         })
-    return result
-
-
-def extract_catalog_playlists(info: dict) -> list[dict]:
-    """Return profile playlist/collection links when TikTok exposes them."""
-    seen = set()
-    result = []
-
-    def visit(value):
-        if isinstance(value, dict):
-            title = value.get("mixName") or value.get("playlistName") or value.get("title")
-            mix_id = value.get("mixId") or value.get("playlistId") or value.get("id")
-            url = value.get("webpage_url") or value.get("url")
-            if not url and mix_id and info.get("uploader_url"):
-                url = f"{str(info['uploader_url']).rstrip('/')}/collection/{title or 'playlist'}-{mix_id}"
-            if url and title and "tiktok.com/" in str(url).lower():
-                key = str(url)
-                if key not in seen:
-                    seen.add(key)
-                    result.append({"title": str(title), "url": key})
-            for child in value.values():
-                visit(child)
-        elif isinstance(value, list):
-            for child in value:
-                visit(child)
-
-    for key in ("mixes", "playlists", "collections", "playlist"):
-        visit(info.get(key))
     return result
 
 
@@ -164,7 +137,10 @@ def select_preview_format(formats: list[dict], *, prefer_h264: bool = False) -> 
 
 
 def _ydl_access_options(url: str, settings: dict) -> dict:
-    options = {"quiet": True, "no_warnings": True}
+    # Windowed/frozen builds may have a stderr handle whose flush raises
+    # OSError. Route yt-dlp diagnostics through the local redacting logger
+    # instead of letting yt-dlp write directly to the unavailable console.
+    options = {"quiet": True, "no_warnings": True, "logger": YtDlpLogCollector("tiktok-info")}
     cookies_file = cookie_file_for_url(url)
     if not cookies_file and settings.get("auto_export_cookies", True):
         cookies_file, _ = ensure_cookie_file_for_url(url)
@@ -310,7 +286,7 @@ def apply_downloadable_quality(entries: list[dict], probe_limit: int = 5) -> Non
 
 
 def resolve_downloadable_quality_batch(
-    entries: list[dict], probe_limit: int = 100, max_workers: int = 5,
+    entries: list[dict], probe_limit: int = 100, max_workers: int = 5, *, cancelled=None,
 ):
     """Yield verified downloadable quality results without blocking the catalog UI."""
     targets = [
@@ -320,25 +296,44 @@ def resolve_downloadable_quality_batch(
     if not targets:
         return
     workers = max(1, min(8, int(max_workers or 1), len(targets)))
-    with ThreadPoolExecutor(max_workers=workers) as executor:
-        future_to_entry = {
-            executor.submit(tikwm_best_quality, entry["url"]): entry
-            for entry in targets
-        }
-        for future in as_completed(future_to_entry):
-            entry = future_to_entry[future]
+    cancelled = cancelled or (lambda: False)
+    executor = ThreadPoolExecutor(max_workers=workers)
+    future_to_entry = {}
+    target_iter = iter(targets)
+
+    def fill():
+        while len(future_to_entry) < workers and not cancelled():
             try:
-                quality = future.result()
-            except Exception as exc:
-                logger.warning(
-                    f"TikTok downloadable quality probe unavailable: {exc}"
-                )
-                yield entry["url"], {"probe_failed": True}
-                continue
-            if quality:
-                yield entry["url"], quality
-            else:
-                yield entry["url"], {"probe_failed": True}
+                entry = next(target_iter)
+            except StopIteration:
+                break
+            future_to_entry[executor.submit(tikwm_best_quality, entry["url"])] = entry
+
+    try:
+        fill()
+        while future_to_entry and not cancelled():
+            done, _ = wait(future_to_entry, timeout=0.2, return_when=FIRST_COMPLETED)
+            for future in done:
+                entry = future_to_entry.pop(future)
+                if cancelled():
+                    break
+                try:
+                    quality = future.result()
+                except Exception as exc:
+                    logger.warning(
+                        f"TikTok downloadable quality probe unavailable: {exc}"
+                    )
+                    yield entry["url"], {"probe_failed": True}
+                    continue
+                if quality:
+                    yield entry["url"], quality
+                else:
+                    yield entry["url"], {"probe_failed": True}
+            fill()
+    finally:
+        # Active network calls have their own timeouts. Do not start the rest
+        # of a 100-video queue after its catalog has been closed.
+        executor.shutdown(wait=not cancelled(), cancel_futures=True)
 
 
 class TikTokCatalogWorker(QThread):
@@ -353,47 +348,49 @@ class TikTokCatalogWorker(QThread):
 
     def run(self):
         try:
+            started = time.monotonic()
             options = _ydl_access_options(self.url, self.settings)
             options.update({
                 "extract_flat": "in_playlist",
                 "skip_download": True,
                 "noplaylist": False,
+                # Bound retries: network stalls must not keep a profile
+                # extraction active for many minutes by default.
+                "socket_timeout": 10,
+                "retries": 1,
+                "extractor_retries": 1,
             })
             limit = int(self.settings.get("tiktok_catalog_limit") or 0)
             if limit > 0:
                 options["playlistend"] = limit
             with yt_dlp.YoutubeDL(options) as ydl:
                 info = ydl.extract_info(self.url, download=False) or {}
+                if self.isInterruptionRequested():
+                    return
                 entries = normalize_catalog_entries(info.get("entries") or [], self.url)
                 playlists = extract_catalog_playlists(info)
-                username_match = re.search(r"tiktok\.com/@([^/?]+)", self.url)
-                if username_match and entries:
-                    try:
-                        details = _profile_source_data(
-                            ydl,
-                            str(info.get("id") or ""),
-                            username_match.group(1),
-                            {entry["id"] for entry in entries},
-                        )
-                        for entry in entries:
-                            entry.update(details.get(entry["id"], {}))
-                    except Exception as exc:
-                        logger.warning(
-                            f"TikTok source metadata fallback unavailable: {exc}"
-                        )
+                # Do not serially fetch the profile again before displaying it.
+                # Quality probing runs below after loaded; preview streams are
+                # fetched on demand by TikTokPreviewWorker.
             if not entries:
                 if "/collection/" in self.url.lower() or "/playlist/" in self.url.lower():
                     raise RuntimeError("TIKTOK_EMPTY_COLLECTION")
                 raise RuntimeError("TikTok не вернул доступные видео профиля")
+            logger.info("TikTok catalog loaded: entries=%s playlists=%s elapsed=%.2fs",
+                        len(entries), len(playlists), time.monotonic() - started)
             self.loaded.emit(str(info.get("title") or "TikTok"), entries, playlists)
             probe_limit = int(self.settings.get("tiktok_quality_probe_limit") or 100)
             workers = int(self.settings.get("tiktok_quality_probe_workers") or 5)
             for url, verified_quality in resolve_downloadable_quality_batch(
-                entries, probe_limit, workers,
+                entries, probe_limit, workers, cancelled=self.isInterruptionRequested,
             ):
+                if self.isInterruptionRequested():
+                    return
                 self.quality_resolved.emit(url, verified_quality)
         except Exception as exc:
-            self.failed.emit(classify_download_error(str(exc)).user_text())
+            if not self.isInterruptionRequested():
+                logger.exception("TikTok catalog extraction failed")
+                self.failed.emit(classify_download_error(str(exc)).user_text())
 
 
 class TikTokPreviewWorker(QThread):

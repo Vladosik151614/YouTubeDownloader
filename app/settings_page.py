@@ -187,7 +187,7 @@ class SettingsPage(QWidget):
         _, grid = self._grid_group("Загрузка", layout)
         row = 0
 
-        self.download_type_combo = _combo(["Видео", "Только аудио", "Картинки/миниатюры", "Документы/описания"], 260)
+        self.download_type_combo = _combo(["Видео", "Только звук — MP3", "Картинки/миниатюры", "Документы/описания"], 260)
         self._grid_row(grid, row, "Тип:", self.download_type_combo)
         self.quality_combo = _combo(["Лучшее", "2160p", "1440p", "1080p", "720p", "480p"])
         self._grid_row(grid, row, "Качество:", self.quality_combo, 2)

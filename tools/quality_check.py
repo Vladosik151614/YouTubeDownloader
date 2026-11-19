@@ -52,7 +52,7 @@ def max_lines_for(rel: str) -> int:
 
 def run_privacy_check() -> list[str]:
     result = subprocess.run(
-        [sys.executable, str(ROOT / "tools" / "privacy_check.py")],
+        [sys.executable, "-B", str(ROOT / "tools" / "privacy_check.py")],
         cwd=ROOT,
         text=True,
         capture_output=True,

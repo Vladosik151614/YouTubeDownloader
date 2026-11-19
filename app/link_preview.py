@@ -10,6 +10,7 @@ from PySide6.QtCore import QThread, Signal
 
 from app.auth_manager import cookie_file_for_url, ensure_cookie_file_for_url, service_for_url
 from app.binary_manager import get_binary_path
+from app.download_utils import YtDlpLogCollector
 
 
 def _duration_text(seconds) -> str:
@@ -60,10 +61,23 @@ class LinkPreviewWorker(QThread):
         opts = {
             "quiet": True,
             "no_warnings": True,
+            # Frozen Windows builds may have no valid stderr handle. Route
+            # yt-dlp diagnostics through the local redacted logger instead.
+            "logger": YtDlpLogCollector("link-preview"),
             "noplaylist": False,
-            "extract_flat": False,
+            # A playlist may contain hundreds of items. Fetching every video
+            # here delays the preview by minutes; individual links still get
+            # full metadata, while playlist entries stay lightweight.
+            "extract_flat": "in_playlist",
+            "socket_timeout": 15,
             "ffmpeg_location": os.path.dirname(get_binary_path("ffmpeg")),
         }
+        deno = get_binary_path("deno")
+        node = get_binary_path("node")
+        if os.path.isfile(deno):
+            opts["js_runtimes"] = {"deno": {"path": deno}}
+        elif os.path.isfile(node):
+            opts["js_runtimes"] = {"node": {"path": node}}
         if cookies_file and os.path.isfile(cookies_file):
             opts["cookiefile"] = cookies_file
 

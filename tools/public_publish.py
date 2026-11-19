@@ -12,6 +12,8 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+sys.dont_write_bytecode = True
+from release_manifest import release_files
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -25,6 +27,8 @@ SKIP_NAMES = {
     "owner_tools_shared.py",
     "owner_release_publish.py",
     "settings.json",
+    "test_owner_log_history.py",
+    "test_logger_privacy.py",
     "cookies.txt",
 }
 SKIP_SUFFIXES = {".pyc", ".log", ".tmp", ".bak", ".exe", ".dll", ".zip"}
@@ -59,7 +63,7 @@ def should_skip(path: Path) -> bool:
 
 
 def copy_public_tree(target: Path) -> None:
-    for path in ROOT.rglob("*"):
+    for path in release_files(ROOT):
         if not path.is_file() or should_skip(path):
             continue
         rel = path.relative_to(ROOT)
@@ -81,6 +85,11 @@ def clear_worktree(target: Path) -> None:
 def patch_owner_imports(target: Path) -> None:
     main_window = target / "app" / "main_window.py"
     text = main_window.read_text(encoding="utf-8")
+    text = text.replace('from app.owner_tools import OwnerToolsPage\n', 'OwnerToolsPage = None\n')
+    text = text.replace('from app.owner_tools_shared import LOCAL_OWNER_FLAG, OWNER_LOGIN, ROOT\n',
+                        'from pathlib import Path\nROOT = Path(__file__).resolve().parents[1]\nOWNER_LOGIN = ""\nLOCAL_OWNER_FLAG = ROOT / ".public-owner-disabled"\n')
+    text = text.replace('if os.environ.get("YTD_PUBLIC_DOCS_MODE") == "1" or not LOCAL_OWNER_FLAG.exists():',
+                        'if OwnerToolsPage is None or os.environ.get("YTD_PUBLIC_DOCS_MODE") == "1" or not LOCAL_OWNER_FLAG.exists():')
     text = text.replace(
         "from app.owner_tools import OwnerToolsPage, owner_tools_available\n",
         "def owner_tools_available():\n    return False\n\nOwnerToolsPage = None\n",
@@ -107,9 +116,7 @@ def main() -> int:
     message = " ".join(sys.argv[1:]).strip() or "Update public release"
     run([sys.executable, "tools\\privacy_check.py"], ROOT)
     run([sys.executable, "tools\\quality_check.py"], ROOT)
-    target = Path(tempfile.gettempdir()) / "YouTubeDownloader-public-export"
-    if target.exists():
-        remove_tree(target)
+    target = Path(tempfile.mkdtemp(prefix="YouTubeDownloader-public-export-"))
     run(["git", "clone", PUBLIC_REPO, str(target)], ROOT, timeout=240)
     ensure_commit_identity(target)
     clear_worktree(target)

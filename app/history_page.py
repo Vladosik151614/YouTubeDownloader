@@ -82,9 +82,10 @@ class HistoryPage(QWidget):
             self._set_item(row, 1, record.get("source", ""))
             title = record.get("title") or record.get("url") or ""
             self._set_item(row, 2, title, title)
-            status = "Готово" if record.get("status") == "success" else "Ошибка"
+            state = record.get("status")
+            status = {"success": "Готово", "success_with_skips": "С пропусками", "skipped": "Пропущено"}.get(state, "Ошибка")
             status_item = self._set_item(row, 3, status)
-            status_item.setForeground(QColor("#4caf50" if record.get("status") == "success" else "#f44336"))
+            status_item.setForeground(QColor("#4caf50" if state in {"success", "success_with_skips"} else "#d6a74b" if state == "skipped" else "#f44336"))
             self._add_actions(row, record)
             self.table.setRowHeight(row, 34)
 

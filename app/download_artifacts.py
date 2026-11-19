@@ -3,8 +3,33 @@ from __future__ import annotations
 
 import os
 import re
+import json
+import subprocess
 
 from app.logger import logger
+from app.binary_manager import get_binary_path
+from app.process_utils import hidden_subprocess_kwargs
+
+
+def validate_video_with_audio(path: str) -> tuple[bool, str]:
+    """Do not report an audio-only, silent or uninspectable file as a complete video."""
+    try:
+        result = subprocess.run(
+            [get_binary_path("ffprobe"), "-v", "error", "-show_entries",
+             "stream=codec_type:stream_disposition=attached_pic", "-of", "json", path],
+            capture_output=True, text=True, timeout=30, **hidden_subprocess_kwargs(),
+        )
+        if result.returncode:
+            return False, "Не удалось проверить потоки файла через ffprobe"
+        streams = json.loads(result.stdout).get("streams", [])
+        video = any(s.get("codec_type") == "video" and not (s.get("disposition") or {}).get("attached_pic") for s in streams)
+        audio = any(s.get("codec_type") == "audio" for s in streams)
+        if not video or not audio:
+            return False, "В файле отсутствует " + ("видео и звук" if not video and not audio else "видео" if not video else "звук")
+        return True, ""
+    except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
+        logger.warning("Media validation failed: %s", exc)
+        return False, "Не удалось проверить видео и звук: проверьте доступность ffprobe"
 
 
 def snapshot_output_files(folder: str) -> set[str]:
@@ -21,7 +46,7 @@ def snapshot_output_files(folder: str) -> set[str]:
 
 
 def new_media_files(folder: str, before: set[str]) -> list[str]:
-    media_exts = {".mp4", ".mkv", ".webm", ".m4a", ".mp3", ".opus", ".jpg", ".jpeg", ".png", ".webp", ".json", ".description", ".vtt", ".srt"}
+    media_exts = {".mp4", ".mov", ".mkv", ".webm", ".m4a", ".mp3", ".opus", ".jpg", ".jpeg", ".png", ".webp", ".json", ".description", ".vtt", ".srt"}
     after = snapshot_output_files(folder)
     return sorted(
         path for path in after - before

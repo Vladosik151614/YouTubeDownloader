@@ -29,6 +29,25 @@ def classify_download_error(raw_message: str) -> DownloadErrorInfo:
     def result(category: str, title: str, message: str, *actions: str, retryable: bool = True):
         return DownloadErrorInfo(category, title, message, tuple(actions), raw, retryable)
 
+    if "в файле отсутствует" in text:
+        return result(
+            "incomplete_media", "Файл загружен не полностью",
+            "Не удалось подтвердить наличие изображения и звука. Файл сохранён, но загрузка не отмечена успешной.",
+            "Повторите попытку; если ошибка повторится, сохраните журнал для разработчика.",
+        )
+    if "плейлист загружен не полностью" in text or "недоступных элементов в плейлисте" in text:
+        return result(
+            "partial_playlist", "Плейлист загружен не полностью",
+            "Некоторые ролики недоступны или не прошли проверку. Уже скачанные файлы сохранены.",
+            "Проверьте доступность отсутствующих роликов и повторите загрузку.",
+        )
+    if "не создано ни одного полного файла" in text or "загрузка не создала новый файл" in text:
+        return result(
+            "no_new_media", "Новый файл не создан",
+            "Ролик мог быть пропущен как ранее скачанный, либо его не удалось сохранить.",
+            "Проверьте папку загрузки и настройки пропуска ранее скачанных файлов.",
+        )
+
     if (
         (
             any(tag in text for tag in ("[tiktok]", "[tiktokcollection]", "[tiktokuser]"))
@@ -107,7 +126,7 @@ def classify_download_error(raw_message: str) -> DownloadErrorInfo:
             "YouTube разрешает загрузку этого видео только после входа в подходящий аккаунт.",
             "Войдите в аккаунт и обновите данные доступа в приложении.", retryable=False,
         )
-    if "video unavailable" in text or "has been removed" in text or "is unavailable" in text:
+    if any(marker in text for marker in ("video unavailable", "has been removed", "is unavailable", "видео недоступно")):
         return result(
             "unavailable", "Видео недоступно",
             "Автор удалил или ограничил видео, либо оно недоступно в вашем регионе.",

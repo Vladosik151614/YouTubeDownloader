@@ -1,5 +1,13 @@
 # YouTube Downloader
 
+### Версия 0.1.6 · 19 ноября 2026
+
+Чтобы скачать музыку из видео: на главном экране выберите **«Только звук — MP3»**, укажите папку, вставьте ссылку и нажмите **«Скачать»**. Приложение загружает отдельную аудиодорожку и сохраняет MP3; временный аудиофайл после успешного преобразования удаляется. Если площадка не предоставляет отдельную аудиодорожку, режим сообщает об ошибке, а не скачивает видео скрытно. Видео со звуком выбирается отдельно.
+
+Добавлены локальная вкладка Upscale со сравнением до/после, переключатель звука предпросмотра TikTok, проверки потоков и восстановление загрузок. Более высокобитрейтный TikTok HD на уровне сторонних сайтов пока не гарантируется. MP3 и upscale не восстанавливают детали, которых нет в источнике.
+
+Для MP3 и обработки видео нужны FFmpeg и ffprobe: приложение ищет их в своей папке бинарников, локальном кэше и системном PATH. Установщик приложения не заменяет установку этих зависимостей на чистой Windows.
+
 A clean Windows desktop app for downloading public video and music links with a real queue, quality controls, local settings, and a privacy-first workflow.
 
 It is built for people who want a normal Windows app instead of command-line tools: paste a link, choose quality, add it to the queue, and manage downloads from one interface.
@@ -15,7 +23,7 @@ It is built for people who want a normal Windows app instead of command-line too
 
 - Real Windows desktop app, not only a CLI script.
 - Download queue with pause, retry, cancel and open-folder actions.
-- Quality, FPS, container and H.264 conversion controls.
+- Quality, FPS, container, codec and standalone upscale controls.
 - Public downloads work without account sign-in where supported.
 - Restricted content can use a separate app Chrome profile.
 - Local-first storage: settings, logs and history stay on your computer.
@@ -27,7 +35,7 @@ Latest Windows installer:
 [Download YouTube Downloader for Windows](https://github.com/Vladosik151614/YouTubeDownloader/releases/latest)
 
 Direct installer link:
-[YouTubeDownloaderSetup-0.1.5.exe](https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.5.exe)
+[YouTubeDownloaderSetup-0.1.6.exe](https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.6.exe)
 
 Read the [Privacy Policy](PRIVACY.md) before sharing logs or publishing builds.
 
@@ -48,6 +56,7 @@ Most downloader tools are either command-line utilities, ad-heavy websites, or u
 - Multi-service workflow for YouTube, TikTok, Twitch, SoundCloud, Spotify metadata resolving and other supported links.
 - TikTok profile and collection catalog on the first download screen with four-column cards, real covers, inline muted hover preview, source quality labels and per-card or bulk actions.
 - Download profiles for video/audio type, quality, FPS, container, codec and encoder mode.
+- Standalone Upscale tab for local video files with output-folder selection, muted before/after autoplay comparison, 2K/4K targets, FPS, container, codec and encoder controls.
 - Optional H.264 conversion with GPU-first mode and CPU fallback.
 - Local history, queue actions, retry, pause, cancel and open-folder controls.
 - Separate folders for services and media types.
@@ -95,13 +104,13 @@ Most downloader tools are either command-line utilities, ad-heavy websites, or u
 Normal install:
 
 ```powershell
-irm "https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.5.exe" -OutFile "$env:TEMP\YouTubeDownloaderSetup.exe"; Start-Process "$env:TEMP\YouTubeDownloaderSetup.exe" -Wait
+irm "https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.6.exe" -OutFile "$env:TEMP\YouTubeDownloaderSetup.exe"; Start-Process "$env:TEMP\YouTubeDownloaderSetup.exe" -Wait
 ```
 
 Silent install:
 
 ```powershell
-$url = "https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.5.exe"
+$url = "https://github.com/Vladosik151614/YouTubeDownloader/releases/latest/download/YouTubeDownloaderSetup-0.1.6.exe"
 $installer = "$env:TEMP\YouTubeDownloaderSetup.exe"
 Invoke-WebRequest $url -OutFile $installer
 Start-Process $installer -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" -Wait
